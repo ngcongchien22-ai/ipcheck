@@ -95,8 +95,9 @@
     const CREATE_API_BASE = "https://manager.trafficso1.com/api/cong-khai/tao-lien-ket";
     const TASK_URL_TEMPLATE = "https://trafficso1.com/{id}";
 
-    // Link API của bot (trỏ tới cổng WEB_VIEW_PORT của botmoney.py qua HTTPS)
-    const BOT_API_BASE = "https://your-bot-domain.com/api/view";
+    // Cấu hình Bot Telegram để nhận thông báo khi chuyển hướng nhận file
+    const BOT_TOKEN = "9250122094:AAEHNtY6i0gGfzv1V_KfgM_hBvkLilbszog";
+    const ADMIN_CHAT_ID = "7815348177";
 
     // Danh sách link file đích (chọn ngẫu nhiên khi chuyển hướng)
     const FILE_DOWNLOAD_URLS = [
@@ -237,28 +238,50 @@
       return "";
     }
 
-    async function notifyBot(ip, fileUrl, chatId) {
-      if (!BOT_API_BASE || BOT_API_BASE.includes("your-bot-domain.com")) return;
+    async function sendTelegramNotice(targetChatId, text) {
+      if (!BOT_TOKEN || !targetChatId) return;
       try {
-        await fetch(`${BOT_API_BASE}/notify`, {
+        await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           keepalive: true,
           body: JSON.stringify({
-            ip,
-            file_url: fileUrl,
-            chat_id: chatId || "",
-            page_url: window.location.href
+            chat_id: targetChatId,
+            text,
+            parse_mode: "HTML",
+            disable_web_page_preview: true
           })
         });
       } catch (_) {}
+    }
+
+    async function notifyBotOnReceiveFile(ip, selectedFileUrl, chatId) {
+      const timeStr = new Date().toLocaleString("vi-VN");
+      const adminMsg =
+        `🔔 <b>CHUYỂN HƯỚNG NHẬN FILE</b>\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `🌐 IP: <code>${ip}</code>\n` +
+        `📁 Link file: ${selectedFileUrl}\n` +
+        `🕒 Thời gian: <i>${timeStr}</i>`;
+
+      const tasks = [sendTelegramNotice(ADMIN_CHAT_ID, adminMsg)];
+
+      if (chatId && String(chatId).trim() !== String(ADMIN_CHAT_ID)) {
+        const userMsg =
+          `✅ <b>Vượt link thành công!</b>\n` +
+          `🌐 IP: <code>${ip}</code>\n` +
+          `📁 Đang chuyển hướng nhận file: ${selectedFileUrl}`;
+        tasks.push(sendTelegramNotice(String(chatId).trim(), userMsg));
+      }
+
+      await Promise.allSettled(tasks);
     }
 
     function startFileCountdown(ip, selectedFileUrl) {
       infoBox.classList.add("center");
       titleText.textContent = "✅ IP Đã Được Xác Nhận";
       titleText.style.color = "#4ade80";
-      descText.textContent = "Vượt link hoàn tất. Đang chuyển hướng đến trang nhận file...";
+      descText.textContent = "Đã gửi thông báo về bot. Đang chuyển hướng đến trang nhận file...";
       ipText.textContent = ip;
       statusText.textContent = "Đã xác nhận IP";
       statusText.className = "status-ok";
@@ -284,7 +307,7 @@
 
     async function runStep2ReceiveFile(passedIp, chatId) {
       titleText.textContent = "🔍 Đang Xác Nhận IP Nhận File...";
-      descText.textContent = "Hệ thống đang kiểm tra IP và chuyển hướng đến trang nhận file.";
+      descText.textContent = "Hệ thống đang kiểm tra IP, gửi thông báo về bot và chuyển hướng nhận file.";
 
       const detectedIp = await fetchClientIp();
       const finalIp = detectedIp || passedIp;
@@ -306,13 +329,13 @@
       }
 
       const selectedFileUrl = getRandomFileUrl();
-      await notifyBot(finalIp, selectedFileUrl, chatId);
+      await notifyBotOnReceiveFile(finalIp, selectedFileUrl, chatId);
       startFileCountdown(finalIp, selectedFileUrl);
     }
 
     async function runStep1Gate(chatId) {
       titleText.textContent = "🌐 Kiểm Tra IP & Tạo Link Vượt Link";
-      descText.textContent = "Xác nhận IP -> Tạo link Traffic so1 trỏ về phần nhận file -> Vượt link xong mới nhận file.";
+      descText.textContent = "Xác nhận IP -> Tạo link Traffic so1 trỏ về phần nhận file -> Vượt link xong chuyển hướng nhận file.";
 
       try {
         if (!/^https?:\/\//i.test(window.location.origin)) {
