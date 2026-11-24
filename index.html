@@ -88,8 +88,15 @@
   </div>
 
   <script>
-    // Đổi thành link file đích sau khi vượt link Traffic so1 xong và xác nhận IP ở bước nhận file
+    const API_KEY = "cf5e995ca4e04a2e9980c49b1683593b";
+    const CREATE_API_BASE = "https://manager.trafficso1.com/api/cong-khai/tao-lien-ket";
+
+    // Link file đích sau khi vượt link Traffic so1 xong và quay lại ?step=nhanfile
     const FILE_DOWNLOAD_URL = "https://example.com/file-cua-ban.zip";
+
+    // Tùy chọn: nếu API bị chặn CORS/403 trên trình duyệt mà bạn đã có link nhiệm vụ sẵn, dán vào đây
+    const FALLBACK_TASK_URL = "";
+
     const REDIRECT_SECONDS = 3;
     const USED_IP_STORAGE_KEY = "trafficso1_used_ips_v1";
 
@@ -127,53 +134,65 @@
       ];
       for (const ep of endpoints) {
         try {
-          const res = await fetch(ep, { method: "GET" });
+          const res = await fetch(ep, { method: "GET", cache: "no-store" });
           if (!res.ok) continue;
-          const txt = await res.text();
-          const data = JSON.parse(txt);
+          const data = await res.json();
           if (data && data.ip) return String(data.ip).trim();
         } catch (_) {}
       }
       return "";
     }
 
-    function isValidShortLink(candidate, forbiddenUrl) {
+    function isValidTrafficLink(candidate, forbiddenUrl) {
       if (typeof candidate !== "string") return false;
       const u = candidate.trim();
       if (!/^https?:\/\//i.test(u)) return false;
       if (forbiddenUrl && u === forbiddenUrl) return false;
       if (u.includes("step=nhanfile")) return false;
+      if (u.includes("api.ipify.org") || u.includes("manager.trafficso1.com/api")) return false;
       return true;
     }
 
-    function extractTrafficLink(payload, forbiddenUrl) {
-      if (isValidShortLink(payload, forbiddenUrl)) {
-        return payload.trim();
+    function extractLinkFromTextOrObj(payload, forbiddenUrl) {
+      if (typeof payload === "string") {
+        const trimmed = payload.trim();
+        if (isValidTrafficLink(trimmed, forbiddenUrl)) return trimmed;
+
+        const matches = trimmed.match(/https?:\/\/[^\s"'<>\\]+/gi) || [];
+        for (const m of matches) {
+          const clean = m.replace(/[),.;]+$/, "");
+          if (isValidTrafficLink(clean, forbiddenUrl)) return clean;
+        }
+        return "";
       }
+
       if (Array.isArray(payload)) {
         for (const item of payload) {
-          const found = extractTrafficLink(item, forbiddenUrl);
+          const found = extractLinkFromTextOrObj(item, forbiddenUrl);
           if (found) return found;
         }
         return "";
       }
+
       if (payload && typeof payload === "object") {
-        const shortKeys = [
+        const priorityKeys = [
           "short_url", "shortenedUrl", "short_link", "shortLink",
           "traffic_url", "trafficUrl", "task_url", "taskUrl",
+          "redirect_url", "redirectUrl", "dest", "destination",
           "link", "data", "result", "url"
         ];
-        for (const k of shortKeys) {
+        for (const k of priorityKeys) {
           if (payload[k] !== undefined) {
-            const found = extractTrafficLink(payload[k], forbiddenUrl);
+            const found = extractLinkFromTextOrObj(payload[k], forbiddenUrl);
             if (found) return found;
           }
         }
         for (const val of Object.values(payload)) {
-          const found = extractTrafficLink(val, forbiddenUrl);
+          const found = extractLinkFromTextOrObj(val, forbiddenUrl);
           if (found) return found;
         }
       }
+
       return "";
     }
 
@@ -181,7 +200,7 @@
       infoBox.classList.add("center");
       titleText.textContent = "✅ IP Đã Được Xác Nhận";
       titleText.style.color = "#4ade80";
-      descText.textContent = "Đã vượt link xong. Đang chuyển hướng đến trang nhận file...";
+      descText.textContent = "Vượt link hoàn tất. Đang chuyển hướng đến trang nhận file...";
       ipText.textContent = ip;
       statusText.textContent = "Đã xác nhận IP";
       statusText.className = "status-ok";
@@ -256,41 +275,49 @@
         statusText.className = "status-ok";
 
         const receiveFileUrl = `${window.location.origin}${window.location.pathname}?step=nhanfile&ip=${encodeURIComponent(ip)}&ts=${Date.now()}`;
-        const proxyUrl = `./api/create-link?url=${encodeURIComponent(receiveFileUrl)}`;
+        const apiUrl = `${CREATE_API_BASE}?apikey=${encodeURIComponent(API_KEY)}&url=${encodeURIComponent(receiveFileUrl)}`;
 
-        const res = await fetch(proxyUrl, { method: "GET" });
-        const rawProxyText = await res.text();
+        let trafficLink = "";
+        let rawDebug = "";
+        let httpStatus = 0;
 
-        let payload = null;
         try {
-          payload = JSON.parse(rawProxyText);
-        } catch (_) {
-          throw new Error(rawProxyText.slice(0, 220) || `HTTP ${res.status}`);
+          const res = await fetch(apiUrl, { method: "GET", cache: "no-store" });
+          httpStatus = res.status;
+          rawDebug = await res.text();
+
+          let parsed = rawDebug;
+          try {
+            parsed = JSON.parse(rawDebug);
+          } catch (_) {}
+
+          trafficLink = extractLinkFromTextOrObj(parsed, receiveFileUrl) || extractLinkFromTextOrObj(rawDebug, receiveFileUrl);
+        } catch (netErr) {
+          rawDebug = netErr && netErr.message ? netErr.message : "Lỗi mạng / CORS";
         }
 
-        if (!res.ok || !payload || !payload.ok) {
-          throw new Error((payload && payload.error) || `HTTP ${res.status}`);
+        if (!trafficLink && FALLBACK_TASK_URL) {
+          trafficLink = FALLBACK_TASK_URL;
         }
 
-        const candidateSource = payload.data !== undefined ? payload.data : payload.raw;
-        const trafficSo1Link = extractTrafficLink(candidateSource, receiveFileUrl);
-
-        if (!trafficSo1Link) {
-          statusText.textContent = `Chưa lấy được link vượt link (HTTP ${payload.status || res.status})`;
+        if (!trafficLink) {
+          statusText.textContent = httpStatus
+            ? `Chưa lấy được link vượt link (HTTP ${httpStatus})`
+            : "Lỗi gọi API tạo link (CORS / Chặn truy cập)";
           statusText.className = "status-err";
-          detailText.textContent = payload.raw
-            ? `Phản hồi từ API: ${String(payload.raw).slice(0, 260)}`
+          detailText.textContent = rawDebug
+            ? `Phản hồi: ${rawDebug.slice(0, 260)}`
             : "API không trả về link vượt link.";
           return;
         }
 
         saveUsedIp(ip);
-        detailText.textContent = "Đã tạo link Traffic so1. Đang chuyển hướng để vượt link...";
-        manualLink.href = trafficSo1Link;
-        manualLink.textContent = trafficSo1Link;
+        detailText.textContent = "Đã lấy link vượt link. Đang chuyển hướng...";
+        manualLink.href = trafficLink;
+        manualLink.textContent = trafficLink;
         manualLink.style.display = "block";
 
-        window.location.href = trafficSo1Link;
+        window.location.href = trafficLink;
       } catch (err) {
         statusText.textContent = "Lỗi gọi API tạo link";
         statusText.className = "status-err";
