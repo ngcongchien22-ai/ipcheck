@@ -86,6 +86,7 @@
 
     <div style="text-align: center;">
       <a id="directFileBtn" class="btn" href="#" style="display: none;">Mở Link File Ngay</a>
+      <a id="openApiDirectBtn" class="btn" href="#" target="_blank" rel="noopener" style="display: none;">Mở Link API Trực Tiếp</a>
       <button id="retryBtn" class="btn" type="button" style="display: none;" onclick="window.location.reload()">Thử Lại</button>
     </div>
   </div>
@@ -93,14 +94,7 @@
   <script>
     const API_KEY = "cf5e995ca4e04a2e9980c49b1683593b";
     const CREATE_API_BASE = "https://manager.trafficso1.com/api/cong-khai/tao-lien-ket";
-
-    // Nếu bạn có backend/proxy riêng (vd: https://domain-cua-ban.com/api/create-link?url=...), hãy điền vào đây
-    const CUSTOM_PROXY_BASE = "";
-
-    // Mẫu link vượt link (giữ {id} làm chỗ ghép mã id nếu API không trả link đầy đủ)
     const TASK_URL_TEMPLATE = "https://trafficso1.com/{id}";
-
-    // Link file đích sau khi vượt link xong
     const FILE_DOWNLOAD_URL = "https://example.com/file-cua-ban.zip";
     const REDIRECT_SECONDS = 3;
     const USED_IP_STORAGE_KEY = "trafficso1_used_ips_v1";
@@ -115,13 +109,18 @@
     const secLeftEl = document.getElementById("secLeft");
     const manualLink = document.getElementById("manualLink");
     const directFileBtn = document.getElementById("directFileBtn");
+    const openApiDirectBtn = document.getElementById("openApiDirectBtn");
     const retryBtn = document.getElementById("retryBtn");
 
-    function showError(statusMsg, detailMsg) {
+    function showError(statusMsg, detailMsg, apiUrlForManual = "") {
       statusText.textContent = statusMsg;
       statusText.className = "status-err";
       detailText.textContent = detailMsg || "";
       retryBtn.style.display = "inline-block";
+      if (apiUrlForManual) {
+        openApiDirectBtn.href = apiUrlForManual;
+        openApiDirectBtn.style.display = "inline-block";
+      }
     }
 
     function getUsedIps() {
@@ -140,64 +139,50 @@
       }
     }
 
+    async function fetchWithTimeout(url, timeoutMs = 8000) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        return await fetch(url, {
+          method: "GET",
+          cache: "no-store",
+          signal: controller.signal
+        });
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
     async function fetchClientIp() {
-      const endpoints = [
-        "https://api.ipify.org?format=json",
-        "https://api64.ipify.org?format=json"
+      const sources = [
+        async () => {
+          const r = await fetchWithTimeout("https://api.ipify.org?format=json");
+          const d = await r.json();
+          return d && d.ip ? String(d.ip).trim() : "";
+        },
+        async () => {
+          const r = await fetchWithTimeout("https://api64.ipify.org?format=json");
+          const d = await r.json();
+          return d && d.ip ? String(d.ip).trim() : "";
+        },
+        async () => {
+          const r = await fetchWithTimeout("https://ipwho.is/");
+          const d = await r.json();
+          return d && d.success && d.ip ? String(d.ip).trim() : "";
+        }
       ];
-      for (const ep of endpoints) {
+
+      for (const getIp of sources) {
         try {
-          const res = await fetch(ep, { method: "GET", cache: "no-store" });
-          if (!res.ok) continue;
-          const data = await res.json();
-          if (data && data.ip) return String(data.ip).trim();
+          const ip = await getIp();
+          if (ip) return ip;
         } catch (_) {}
       }
       return "";
     }
 
-    async function fetchCreateApi(targetUrl) {
-      const directUrl = `${CREATE_API_BASE}?apikey=${encodeURIComponent(API_KEY)}&url=${encodeURIComponent(targetUrl)}`;
-
-      // 1. Nếu có backend riêng thì ưu tiên gọi backend
-      if (CUSTOM_PROXY_BASE) {
-        const sep = CUSTOM_PROXY_BASE.includes("?") ? "&" : "?";
-        const res = await fetch(`${CUSTOM_PROXY_BASE}${sep}url=${encodeURIComponent(targetUrl)}`, {
-          method: "GET",
-          cache: "no-store"
-        });
-        return { status: res.status, text: await res.text() };
-      }
-
-      // 2. Thử gọi trực tiếp trước
-      try {
-        const res = await fetch(directUrl, { method: "GET", cache: "no-store" });
-        return { status: res.status, text: await res.text() };
-      } catch (directErr) {
-        // 3. Nếu bị chặn CORS (Failed to fetch), thử qua proxy dự phòng
-        const fallbackProxies = [
-          `https://corsproxy.io/?${encodeURIComponent(directUrl)}`,
-          `https://api.allorigins.win/raw?url=${encodeURIComponent(directUrl)}`
-        ];
-
-        for (const proxyUrl of fallbackProxies) {
-          try {
-            const res = await fetch(proxyUrl, { method: "GET", cache: "no-store" });
-            if (res.ok) {
-              return { status: res.status, text: await res.text() };
-            }
-          } catch (_) {}
-        }
-
-        throw new Error(
-          "Không thể gọi trực tiếp tới API (có thể do chặn CORS hoặc mạng). Nên gọi API qua backend riêng."
-        );
-      }
-    }
-
     function buildTrafficLink(parsed, rawText, forbiddenUrl) {
       if (parsed && typeof parsed === "object") {
-        // Tìm các trường link phổ biến (kể cả lồng trong data)
         const candidates = [parsed, parsed.data].filter(Boolean);
         for (const obj of candidates) {
           if (typeof obj !== "object") continue;
@@ -286,6 +271,7 @@
       titleText.textContent = "🌐 Kiểm Tra IP & Tạo Link Vượt Link";
       descText.textContent = "Xác nhận IP -> Tạo link Traffic so1 trỏ về phần nhận file -> Vượt link xong mới nhận file.";
 
+      let apiUrl = "";
       try {
         if (!/^https?:\/\//i.test(window.location.origin)) {
           throw new Error("Hãy mở trang qua http:// hoặc https://.");
@@ -304,7 +290,10 @@
         statusText.className = "status-ok";
 
         const receiveFileUrl = `${window.location.origin}${window.location.pathname}?step=nhanfile&ip=${encodeURIComponent(ip)}&ts=${Date.now()}`;
-        const { status, text: rawText } = await fetchCreateApi(receiveFileUrl);
+        apiUrl = `${CREATE_API_BASE}?apikey=${encodeURIComponent(API_KEY)}&url=${encodeURIComponent(receiveFileUrl)}`;
+
+        const res = await fetchWithTimeout(apiUrl, 10000);
+        const rawText = await res.text();
 
         let parsed = null;
         try {
@@ -315,8 +304,9 @@
 
         if (!trafficLink) {
           showError(
-            `Chưa lấy được link vượt link (HTTP ${status})`,
-            rawText ? `Phản hồi: ${rawText.slice(0, 260)}` : "Phản hồi rỗng."
+            `Chưa lấy được link vượt link (HTTP ${res.status})`,
+            rawText ? `Phản hồi: ${rawText.slice(0, 260)}` : "Phản hồi rỗng.",
+            apiUrl
           );
           return;
         }
@@ -329,7 +319,10 @@
 
         window.location.href = trafficLink;
       } catch (err) {
-        showError("Lỗi gọi API tạo link", err.message || "Lỗi không xác định.");
+        const msg = err && err.name === "AbortError"
+          ? "Hết thời gian chờ phản hồi từ máy chủ API."
+          : "Trình duyệt chặn gọi fetch trực tiếp tới manager.trafficso1.com (CORS) hoặc mất kết nối. Chỉ có thể gọi ẩn danh từ server/backend.";
+        showError("Lỗi gọi API tạo link", msg, apiUrl);
       }
     }
 
