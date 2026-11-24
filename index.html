@@ -91,8 +91,9 @@
     const API_KEY = "cf5e995ca4e04a2e9980c49b1683593b";
     const CREATE_API_BASE = "https://manager.trafficso1.com/api/cong-khai/tao-lien-ket";
 
-    // Domain link vượt link của Traffic so1 (ghép với id trả về, ví dụ https://trafficso1.com/eQDyqd8)
-    const TRAFFIC_TASK_BASE = "https://trafficso1.com";
+    // Sửa mẫu link vượt link cho đúng domain/đường dẫn thực tế của Traffic so1 (giữ {id} làm chỗ ghép mã id)
+    // Ví dụ: "https://trafficso1.com/{id}" hoặc "https://trafficso1.com/go/{id}"
+    const TASK_URL_TEMPLATE = "https://trafficso1.com/{id}";
 
     // Link file đích sau khi vượt link Traffic so1 xong và quay lại ?step=nhanfile
     const FILE_DOWNLOAD_URL = "https://example.com/file-cua-ban.zip";
@@ -142,27 +143,23 @@
       return "";
     }
 
-    function buildTrafficLinkFromResponse(parsed, rawText, forbiddenUrl) {
-      const base = TRAFFIC_TASK_BASE.replace(/\/+$/, "");
-
+    function buildTrafficLink(parsed, rawText, forbiddenUrl) {
       if (parsed && typeof parsed === "object") {
-        // Nếu có sẵn link rút gọn khác link đích thì dùng luôn
         for (const key of ["short_url", "shortenedUrl", "short_link", "shortLink", "task_url", "traffic_url", "link"]) {
           const val = parsed[key];
           if (typeof val === "string" && /^https?:\/\//i.test(val.trim()) && val.trim() !== forbiddenUrl && !val.includes("step=nhanfile")) {
             return val.trim();
           }
         }
-        // Ghép từ id trả về (ví dụ: {"id":"eQDyqd8",...})
         if (parsed.id && typeof parsed.id === "string") {
-          return `${base}/${encodeURIComponent(parsed.id.trim())}`;
+          return TASK_URL_TEMPLATE.replace("{id}", encodeURIComponent(parsed.id.trim()));
         }
       }
 
       if (typeof rawText === "string") {
         const idMatch = rawText.match(/"id"\s*:\s*"([^"]+)"/);
         if (idMatch && idMatch[1]) {
-          return `${base}/${encodeURIComponent(idMatch[1].trim())}`;
+          return TASK_URL_TEMPLATE.replace("{id}", encodeURIComponent(idMatch[1].trim()));
         }
       }
 
@@ -258,7 +255,7 @@
           parsed = JSON.parse(rawText);
         } catch (_) {}
 
-        const trafficLink = buildTrafficLinkFromResponse(parsed, rawText, receiveFileUrl);
+        const trafficLink = buildTrafficLink(parsed, rawText, receiveFileUrl);
 
         if (!trafficLink) {
           statusText.textContent = `Chưa lấy được link vượt link (HTTP ${res.status})`;
