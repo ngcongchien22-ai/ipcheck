@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Xác Nhận IP & Chuyển Hướng</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: Arial, sans-serif; }
+    body {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #0f172a;
+      color: #f8fafc;
+      padding: 16px;
+    }
+    .card {
+      width: 100%;
+      max-width: 440px;
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 14px;
+      padding: 24px;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+      text-align: center;
+    }
+    h1 { font-size: 20px; margin-bottom: 10px; color: #38bdf8; }
+    .desc { font-size: 14px; color: #cbd5e1; margin-bottom: 18px; line-height: 1.5; }
+    .box {
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 10px;
+      padding: 14px;
+      margin-bottom: 16px;
+      font-size: 14px;
+      line-height: 1.7;
+      text-align: left;
+      word-break: break-word;
+    }
+    .box.center { text-align: center; }
+    .status-ok { color: #4ade80; font-weight: bold; }
+    .status-err { color: #f87171; font-weight: bold; }
+    .status-wait { color: #facc15; font-weight: bold; }
+    .countdown {
+      font-size: 28px;
+      font-weight: bold;
+      color: #facc15;
+      margin-top: 8px;
+    }
+    .link-out {
+      display: block;
+      margin-top: 10px;
+      word-break: break-all;
+      color: #7dd3fc;
+      font-size: 13px;
+    }
+    .btn {
+      display: inline-block;
+      margin-top: 10px;
+      padding: 10px 16px;
+      border-radius: 8px;
+      background: #0284c7;
+      color: #fff;
+      text-decoration: none;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1 id="titleText">🔍 Đang Kiểm Tra IP...</h1>
+    <p class="desc" id="descText">Vui lòng chờ trong giây lát...</p>
+
+    <div class="box" id="infoBox">
+      <div>IP của bạn: <strong id="ipText">Đang kiểm tra...</strong></div>
+      <div>Trạng thái: <span id="statusText" class="status-wait">Đang xác nhận...</span></div>
+      <div id="detailText" style="margin-top: 6px; color: #cbd5e1; font-size: 13px;"></div>
+      <div class="countdown" id="countdownBox" style="display: none;">
+        Chuyển hướng sau <span id="secLeft">3</span>s
+      </div>
+      <a id="manualLink" class="link-out" href="#" style="display: none;">Bấm vào đây nếu không tự chuyển hướng</a>
+    </div>
+
+    <div style="text-align: center;">
+      <a id="directFileBtn" class="btn" href="#" style="display: none;">Mở Link File Ngay</a>
+    </div>
+  </div>
+
+  <script>
+    // Đổi thành link file đích sau khi vượt link Traffic so1 xong và xác nhận IP ở bước nhận file
+    const FILE_DOWNLOAD_URL = "https://example.com/file-cua-ban.zip";
+    const REDIRECT_SECONDS = 3;
+    const USED_IP_STORAGE_KEY = "trafficso1_used_ips_v1";
+
+    const titleText = document.getElementById("titleText");
+    const descText = document.getElementById("descText");
+    const infoBox = document.getElementById("infoBox");
+    const ipText = document.getElementById("ipText");
+    const statusText = document.getElementById("statusText");
+    const detailText = document.getElementById("detailText");
+    const countdownBox = document.getElementById("countdownBox");
+    const secLeftEl = document.getElementById("secLeft");
+    const manualLink = document.getElementById("manualLink");
+    const directFileBtn = document.getElementById("directFileBtn");
+
+    function getUsedIps() {
+      try {
+        return JSON.parse(localStorage.getItem(USED_IP_STORAGE_KEY) || "[]");
+      } catch (_) {
+        return [];
+      }
+    }
+
+    function saveUsedIp(ip) {
+      const list = getUsedIps();
+      if (!list.includes(ip)) {
+        list.push(ip);
+        localStorage.setItem(USED_IP_STORAGE_KEY, JSON.stringify(list));
+      }
+    }
+
+    async function fetchClientIp() {
+      const endpoints = [
+        "https://api.ipify.org?format=json",
+        "https://api64.ipify.org?format=json"
+      ];
+      for (const ep of endpoints) {
+        try {
+          const res = await fetch(ep, { method: "GET" });
+          if (!res.ok) continue;
+          const txt = await res.text();
+          const data = JSON.parse(txt);
+          if (data && data.ip) return String(data.ip).trim();
+        } catch (_) {}
+      }
+      return "";
+    }
+
+    function isValidShortLink(candidate, forbiddenUrl) {
+      if (typeof candidate !== "string") return false;
+      const u = candidate.trim();
+      if (!/^https?:\/\//i.test(u)) return false;
+      if (forbiddenUrl && u === forbiddenUrl) return false;
+      if (u.includes("step=nhanfile")) return false;
+      return true;
+    }
+
+    function extractTrafficLink(payload, forbiddenUrl) {
+      if (isValidShortLink(payload, forbiddenUrl)) {
+        return payload.trim();
+      }
+      if (Array.isArray(payload)) {
+        for (const item of payload) {
+          const found = extractTrafficLink(item, forbiddenUrl);
+          if (found) return found;
+        }
+        return "";
+      }
+      if (payload && typeof payload === "object") {
+        const shortKeys = [
+          "short_url", "shortenedUrl", "short_link", "shortLink",
+          "traffic_url", "trafficUrl", "task_url", "taskUrl",
+          "link", "data", "result", "url"
+        ];
+        for (const k of shortKeys) {
+          if (payload[k] !== undefined) {
+            const found = extractTrafficLink(payload[k], forbiddenUrl);
+            if (found) return found;
+          }
+        }
+        for (const val of Object.values(payload)) {
+          const found = extractTrafficLink(val, forbiddenUrl);
+          if (found) return found;
+        }
+      }
+      return "";
+    }
+
+    function startFileCountdown(ip) {
+      infoBox.classList.add("center");
+      titleText.textContent = "✅ IP Đã Được Xác Nhận";
+      titleText.style.color = "#4ade80";
+      descText.textContent = "Đã vượt link xong. Đang chuyển hướng đến trang nhận file...";
+      ipText.textContent = ip;
+      statusText.textContent = "Đã xác nhận IP";
+      statusText.className = "status-ok";
+      detailText.textContent = "";
+
+      directFileBtn.href = FILE_DOWNLOAD_URL;
+      directFileBtn.style.display = "inline-block";
+
+      let remaining = REDIRECT_SECONDS;
+      secLeftEl.textContent = remaining;
+      countdownBox.style.display = "block";
+
+      const interval = setInterval(() => {
+        remaining -= 1;
+        if (remaining <= 0) {
+          clearInterval(interval);
+          window.location.href = FILE_DOWNLOAD_URL;
+        } else {
+          secLeftEl.textContent = remaining;
+        }
+      }, 1000);
+    }
+
+    async function runStep2ReceiveFile(passedIp) {
+      titleText.textContent = "🔍 Đang Xác Nhận IP Nhận File...";
+      descText.textContent = "Hệ thống đang kiểm tra IP ngay khi bạn vào trang nhận file.";
+
+      const detectedIp = await fetchClientIp();
+      const finalIp = detectedIp || passedIp;
+
+      if (!finalIp) {
+        ipText.textContent = "Không rõ";
+        statusText.textContent = "Không xác nhận được IP";
+        statusText.className = "status-err";
+        detailText.textContent = "Vui lòng kiểm tra kết nối mạng hoặc thử lại.";
+        return;
+      }
+
+      ipText.textContent = finalIp;
+
+      if (passedIp && detectedIp && passedIp !== detectedIp) {
+        statusText.textContent = "IP không khớp phiên ban đầu";
+        statusText.className = "status-err";
+        detailText.textContent = `IP lúc tạo link: ${passedIp} | IP hiện tại: ${detectedIp}`;
+        return;
+      }
+
+      startFileCountdown(finalIp);
+    }
+
+    async function runStep1Gate() {
+      titleText.textContent = "🌐 Kiểm Tra IP & Tạo Link Vượt Link";
+      descText.textContent = "Xác nhận IP -> Tạo link Traffic so1 trỏ về phần nhận file -> Vượt link xong mới nhận file.";
+
+      try {
+        if (!/^https?:\/\//i.test(window.location.origin)) {
+          throw new Error("Hãy mở trang qua http:// hoặc https://.");
+        }
+
+        const ip = await fetchClientIp();
+        if (!ip) throw new Error("Không thể lấy địa chỉ IP của bạn.");
+        ipText.textContent = ip;
+
+        if (getUsedIps().includes(ip)) {
+          statusText.textContent = "IP đã sử dụng";
+          statusText.className = "status-err";
+          detailText.textContent = "IP này đã được xác nhận trước đó. Vui lòng đổi IP khác.";
+          return;
+        }
+
+        statusText.textContent = "IP hợp lệ — Đang tạo link vượt link Traffic so1...";
+        statusText.className = "status-ok";
+
+        const receiveFileUrl = `${window.location.origin}${window.location.pathname}?step=nhanfile&ip=${encodeURIComponent(ip)}&ts=${Date.now()}`;
+        const proxyUrl = `./api/create-link?url=${encodeURIComponent(receiveFileUrl)}`;
+
+        const res = await fetch(proxyUrl, { method: "GET" });
+        const rawProxyText = await res.text();
+
+        let payload = null;
+        try {
+          payload = JSON.parse(rawProxyText);
+        } catch (_) {
+          throw new Error(rawProxyText.slice(0, 220) || `HTTP ${res.status}`);
+        }
+
+        if (!res.ok || !payload || !payload.ok) {
+          throw new Error((payload && payload.error) || `HTTP ${res.status}`);
+        }
+
+        const candidateSource = payload.data !== undefined ? payload.data : payload.raw;
+        const trafficSo1Link = extractTrafficLink(candidateSource, receiveFileUrl);
+
+        if (!trafficSo1Link) {
+          statusText.textContent = `Chưa lấy được link vượt link (HTTP ${payload.status || res.status})`;
+          statusText.className = "status-err";
+          detailText.textContent = payload.raw
+            ? `Phản hồi từ API: ${String(payload.raw).slice(0, 260)}`
+            : "API không trả về link vượt link.";
+          return;
+        }
+
+        saveUsedIp(ip);
+        detailText.textContent = "Đã tạo link Traffic so1. Đang chuyển hướng để vượt link...";
+        manualLink.href = trafficSo1Link;
+        manualLink.textContent = trafficSo1Link;
+        manualLink.style.display = "block";
+
+        window.location.href = trafficSo1Link;
+      } catch (err) {
+        statusText.textContent = "Lỗi gọi API tạo link";
+        statusText.className = "status-err";
+        detailText.textContent = err.message || "Lỗi không xác định.";
+      }
+    }
+
+    (function init() {
+      const params = new URLSearchParams(window.location.search);
+      const step = (params.get("step") || "").trim().toLowerCase();
+      const passedIp = (params.get("ip") || "").trim();
+
+      if (step === "nhanfile") {
+        runStep2ReceiveFile(passedIp);
+      } else {
+        runStep1Gate();
+      }
+    })();
+  </script>
+</body>
+</html>
