@@ -89,15 +89,15 @@
 
   <script>
     const API_KEY = "cf5e995ca4e04a2e9980c49b1683593b";
-    const CREATE_API_BASE = "https://manager.trafficso1.com/api/cong-khai/tao-lien-ket?apikey=cf5e995ca4e04a2e9980c49b1683593b&url=";
+    const CREATE_API_BASE = "https://manager.trafficso1.com/api/cong-khai/tao-lien-ket";
 
-    // Nếu có endpoint proxy/backend riêng gọi API Traffic so1 thì dán vào đây
+    // Nếu có endpoint backend/proxy riêng gọi API Traffic so1 thì dán vào đây
     const PROXY_API_URL = "";
 
-    // Sửa mẫu link vượt link cho đúng domain/đường dẫn thực tế của Traffic so1 (giữ {id} làm chỗ ghép mã id)
+    // Mẫu link vượt link Traffic so1 (giữ {id})
     const TASK_URL_TEMPLATE = "https://trafficso1.com/{id}";
 
-    // Danh sách link nhận file (random, tối đa 2 IP / 1 link)
+    // Danh sách 18 link nhận file (random, tối đa 2 IP / 1 link)
     const FILE_LINKS = [
       "https://zufile.com/f/2j7UH4cQCk",
       "https://zufile.com/f/4utKAAP8GR",
@@ -196,6 +196,16 @@
       return chosenLink;
     }
 
+    async function fetchWithTimeout(url, timeoutMs = 5000) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        return await fetch(url, { method: "GET", cache: "no-store", signal: controller.signal });
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
     async function fetchClientIp() {
       const endpoints = [
         "https://api.ipify.org?format=json",
@@ -203,7 +213,7 @@
       ];
       for (const ep of endpoints) {
         try {
-          const res = await fetch(ep, { method: "GET", cache: "no-store" });
+          const res = await fetchWithTimeout(ep, 4000);
           if (!res.ok) continue;
           const data = await res.json();
           if (data && data.ip) return String(data.ip).trim();
@@ -251,14 +261,21 @@
       let lastErr = "Failed to fetch";
       for (const ep of endpoints) {
         try {
-          const res = await fetch(ep, { method: "GET", cache: "no-store" });
+          const res = await fetchWithTimeout(ep, 5000);
           const rawText = await res.text();
-          if (rawText) {
-            return { ok: true, status: res.status, rawText };
+          if (!rawText) {
+            lastErr = `Phản hồi rỗng (HTTP ${res.status})`;
+            continue;
           }
-          lastErr = `Phản hồi rỗng (HTTP ${res.status})`;
+          if (res.status === 408 || /request timeout/i.test(rawText)) {
+            lastErr = `HTTP ${res.status}: ${rawText.slice(0, 120)}`;
+            continue;
+          }
+          return { ok: true, status: res.status, rawText };
         } catch (err) {
-          lastErr = (err && err.message) || "Failed to fetch";
+          lastErr = err && err.name === "AbortError"
+            ? "Hết thời gian chờ kết nối"
+            : ((err && err.message) || "Failed to fetch");
         }
       }
 
