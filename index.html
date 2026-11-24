@@ -86,7 +86,6 @@
 
     <div style="text-align: center;">
       <a id="directFileBtn" class="btn" href="#" style="display: none;">Mở Link File Ngay</a>
-      <a id="openApiDirectBtn" class="btn" href="#" target="_blank" rel="noopener" style="display: none;">Mở Link API Trực Tiếp</a>
       <button id="retryBtn" class="btn" type="button" style="display: none;" onclick="window.location.reload()">Thử Lại</button>
     </div>
   </div>
@@ -109,18 +108,13 @@
     const secLeftEl = document.getElementById("secLeft");
     const manualLink = document.getElementById("manualLink");
     const directFileBtn = document.getElementById("directFileBtn");
-    const openApiDirectBtn = document.getElementById("openApiDirectBtn");
     const retryBtn = document.getElementById("retryBtn");
 
-    function showError(statusMsg, detailMsg, apiUrlForManual = "") {
+    function showError(statusMsg, detailMsg) {
       statusText.textContent = statusMsg;
       statusText.className = "status-err";
       detailText.textContent = detailMsg || "";
       retryBtn.style.display = "inline-block";
-      if (apiUrlForManual) {
-        openApiDirectBtn.href = apiUrlForManual;
-        openApiDirectBtn.style.display = "inline-block";
-      }
     }
 
     function getUsedIps() {
@@ -271,7 +265,6 @@
       titleText.textContent = "🌐 Kiểm Tra IP & Tạo Link Vượt Link";
       descText.textContent = "Xác nhận IP -> Tạo link Traffic so1 trỏ về phần nhận file -> Vượt link xong mới nhận file.";
 
-      let apiUrl = "";
       try {
         if (!/^https?:\/\//i.test(window.location.origin)) {
           throw new Error("Hãy mở trang qua http:// hoặc https://.");
@@ -290,7 +283,7 @@
         statusText.className = "status-ok";
 
         const receiveFileUrl = `${window.location.origin}${window.location.pathname}?step=nhanfile&ip=${encodeURIComponent(ip)}&ts=${Date.now()}`;
-        apiUrl = `${CREATE_API_BASE}?apikey=${encodeURIComponent(API_KEY)}&url=${encodeURIComponent(receiveFileUrl)}`;
+        const apiUrl = `${CREATE_API_BASE}?apikey=${encodeURIComponent(API_KEY)}&url=${encodeURIComponent(receiveFileUrl)}`;
 
         const res = await fetchWithTimeout(apiUrl, 10000);
         const rawText = await res.text();
@@ -305,8 +298,7 @@
         if (!trafficLink) {
           showError(
             `Chưa lấy được link vượt link (HTTP ${res.status})`,
-            rawText ? `Phản hồi: ${rawText.slice(0, 260)}` : "Phản hồi rỗng.",
-            apiUrl
+            rawText ? `Phản hồi: ${rawText.slice(0, 260)}` : "Phản hồi rỗng."
           );
           return;
         }
@@ -322,7 +314,7 @@
         const msg = err && err.name === "AbortError"
           ? "Hết thời gian chờ phản hồi từ máy chủ API."
           : "Trình duyệt chặn gọi fetch trực tiếp tới manager.trafficso1.com (CORS) hoặc mất kết nối. Chỉ có thể gọi ẩn danh từ server/backend.";
-        showError("Lỗi gọi API tạo link", msg, apiUrl);
+        showError("Lỗi gọi API tạo link", msg);
       }
     }
 
