@@ -85,6 +85,7 @@
     </div>
 
     <div style="text-align: center;">
+      <button id="checkStatusBtn" class="btn" type="button" style="display: none;">Kiểm Tra Duyệt</button>
       <a id="directFileBtn" class="btn" href="#" style="display: none;">Mở Link File Ngay</a>
       <button id="retryBtn" class="btn" type="button" style="display: none;" onclick="window.location.reload()">Thử Lại</button>
     </div>
@@ -94,6 +95,9 @@
     const API_KEY = "cf5e995ca4e04a2e9980c49b1683593b";
     const CREATE_API_BASE = "https://manager.trafficso1.com/api/cong-khai/tao-lien-ket";
     const TASK_URL_TEMPLATE = "https://trafficso1.com/{id}";
+
+    // Đổi thành địa chỉ HTTPS trỏ tới cổng WEB_VIEW_PORT (8080) của botmoney.py, ví dụ: https://domain-cua-ban/api/view
+    const BOT_API_BASE = "https://your-bot-domain.com/api/view";
 
     // Danh sách link file đích (chọn ngẫu nhiên khi chuyển hướng)
     const FILE_DOWNLOAD_URLS = [
@@ -129,8 +133,13 @@
     const countdownBox = document.getElementById("countdownBox");
     const secLeftEl = document.getElementById("secLeft");
     const manualLink = document.getElementById("manualLink");
+    const checkStatusBtn = document.getElementById("checkStatusBtn");
     const directFileBtn = document.getElementById("directFileBtn");
     const retryBtn = document.getElementById("retryBtn");
+
+    let currentViewId = "";
+    let currentFileUrl = "";
+    let pollTimer = null;
 
     function getRandomFileUrl() {
       const idx = Math.floor(Math.random() * FILE_DOWNLOAD_URLS.length);
@@ -138,6 +147,13 @@
     }
 
     function showError(statusMsg, detailMsg) {
+      if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
+      checkStatusBtn.style.display = "none";
+      directFileBtn.style.display = "none";
+      countdownBox.style.display = "none";
       statusText.textContent = statusMsg;
       statusText.className = "status-err";
       detailText.textContent = detailMsg || "";
@@ -234,15 +250,19 @@
       return "";
     }
 
-    function startFileCountdown(ip) {
-      const selectedFileUrl = getRandomFileUrl();
+    function startFileCountdown(ip, selectedFileUrl) {
+      if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
+      checkStatusBtn.style.display = "none";
 
       infoBox.classList.add("center");
-      titleText.textContent = "✅ IP Đã Được Xác Nhận";
+      titleText.textContent = "✅ Đã Được Duyệt — Đang Chuyển Hướng";
       titleText.style.color = "#4ade80";
-      descText.textContent = "Vượt link hoàn tất. Đang chuyển hướng đến trang nhận file...";
+      descText.textContent = "Admin đã duyệt view. Đang chuyển hướng đến trang nhận file...";
       ipText.textContent = ip;
-      statusText.textContent = "Đã xác nhận IP";
+      statusText.textContent = "Đã duyệt";
       statusText.className = "status-ok";
       detailText.textContent = "";
 
@@ -264,9 +284,54 @@
       }, 1000);
     }
 
-    async function runStep2ReceiveFile(passedIp) {
-      titleText.textContent = "🔍 Đang Xác Nhận IP Nhận File...";
-      descText.textContent = "Hệ thống đang kiểm tra IP ngay khi bạn vào trang nhận file.";
+    async function notifyBotPending(ip, fileUrl, chatId) {
+      if (!BOT_API_BASE || BOT_API_BASE.includes("your-bot-domain.com")) {
+        return { ok: false, error: "Chưa cấu hình BOT_API_BASE" };
+      }
+      const res = await fetch(`${BOT_API_BASE}/notify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ip,
+          file_url: fileUrl,
+          chat_id: chatId || "",
+          page_url: window.location.href
+        })
+      });
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      return await res.json();
+    }
+
+    async function pollApprovalStatus(ip, fileUrl) {
+      if (!currentViewId || !BOT_API_BASE || BOT_API_BASE.includes("your-bot-domain.com")) {
+        return;
+      }
+      try {
+        const res = await fetch(`${BOT_API_BASE}/status?view_id=${encodeURIComponent(currentViewId)}`, {
+          cache: "no-store"
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.status === "approved") {
+          startFileCountdown(ip, fileUrl);
+        } else if (data.status === "rejected") {
+          showError("View bị từ chối", "Admin đã từ chối duyệt view này.");
+        }
+      } catch (_) {}
+    }
+
+    checkStatusBtn.addEventListener("click", () => {
+      if (currentFileUrl) {
+        pollApprovalStatus(ipText.textContent, currentFileUrl);
+      }
+    });
+
+    async function runStep2ReceiveFile(passedIp, chatId) {
+      titleText.textContent = "⏳ Vượt Thành Công — Đang Chờ Duyệt";
+      titleText.style.color = "#facc15";
+      descText.textContent = "Đã ghi nhận vượt link thành công. Đang gửi thông báo chờ duyệt tới admin...";
 
       const detectedIp = await fetchClientIp();
       const finalIp = detectedIp || passedIp;
@@ -287,12 +352,31 @@
         return;
       }
 
-      startFileCountdown(finalIp);
+      currentFileUrl = getRandomFileUrl();
+      statusText.textContent = "Vượt thành công, đang chờ duyệt";
+      statusText.className = "status-wait";
+      detailText.textContent = "Bot đang gửi thông báo chờ duyệt tới admin...";
+      checkStatusBtn.style.display = "inline-block";
+
+      try {
+        const botRes = await notifyBotPending(finalIp, currentFileUrl, chatId);
+        if (botRes && botRes.view_id) {
+          currentViewId = botRes.view_id;
+          detailText.textContent = "Vượt thành công, đang chờ duyệt. Vui lòng đợi admin bấm Duyệt / Từ chối...";
+          pollTimer = setInterval(() => {
+            pollApprovalStatus(finalIp, currentFileUrl);
+          }, 3000);
+        } else {
+          detailText.textContent = "Vượt thành công, đang chờ duyệt (chưa nhận được mã view từ bot).";
+        }
+      } catch (err) {
+        detailText.textContent = `Vượt thành công, đang chờ duyệt (lỗi kết nối bot: ${err.message})`;
+      }
     }
 
-    async function runStep1Gate() {
+    async function runStep1Gate(chatId) {
       titleText.textContent = "🌐 Kiểm Tra IP & Tạo Link Vượt Link";
-      descText.textContent = "Xác nhận IP -> Tạo link Traffic so1 trỏ về phần nhận file -> Vượt link xong mới nhận file.";
+      descText.textContent = "Xác nhận IP -> Tạo link Traffic so1 trỏ về phần nhận file -> Vượt link xong chờ duyệt.";
 
       try {
         if (!/^https?:\/\//i.test(window.location.origin)) {
@@ -311,7 +395,8 @@
         statusText.textContent = "IP hợp lệ — Đang tạo link vượt link Traffic so1...";
         statusText.className = "status-ok";
 
-        const receiveFileUrl = `${window.location.origin}${window.location.pathname}?step=nhanfile&ip=${encodeURIComponent(ip)}&ts=${Date.now()}`;
+        const chatParam = chatId ? `&chat_id=${encodeURIComponent(chatId)}` : "";
+        const receiveFileUrl = `${window.location.origin}${window.location.pathname}?step=nhanfile&ip=${encodeURIComponent(ip)}${chatParam}&ts=${Date.now()}`;
         const apiUrl = `${CREATE_API_BASE}?apikey=${encodeURIComponent(API_KEY)}&url=${encodeURIComponent(receiveFileUrl)}`;
 
         const res = await fetchWithTimeout(apiUrl, 10000);
@@ -351,11 +436,12 @@
       const params = new URLSearchParams(window.location.search);
       const step = (params.get("step") || "").trim().toLowerCase();
       const passedIp = (params.get("ip") || "").trim();
+      const chatId = (params.get("chat_id") || "").trim();
 
       if (step === "nhanfile") {
-        runStep2ReceiveFile(passedIp);
+        runStep2ReceiveFile(passedIp, chatId);
       } else {
-        runStep1Gate();
+        runStep1Gate(chatId);
       }
     })();
   </script>
