@@ -259,37 +259,23 @@
       return "";
     }
 
-    async function requestTrafficApiWithRetry(apiUrl) {
-      const candidates = [
-        apiUrl,
-        `https://corsproxy.io/?${encodeURIComponent(apiUrl)}`,
-        `https://api.allorigins.win/raw?url=${encodeURIComponent(apiUrl)}`
-      ];
-
+    async function requestTrafficApiDirect(apiUrl) {
       let lastErr = "Load failed";
-
-      for (let round = 1; round <= 2; round++) {
-        for (const target of candidates) {
-          try {
-            const res = await fetchWithTimeout(target, 9000);
-            const rawText = await res.text();
-            if (!rawText) {
-              lastErr = `Phản hồi rỗng (HTTP ${res.status})`;
-              continue;
-            }
-            return { ok: true, status: res.status, rawText };
-          } catch (err) {
-            lastErr = err && err.name === "AbortError"
-              ? "Hết thời gian chờ kết nối"
-              : (err && err.message ? err.message : "Load failed");
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          const res = await fetchWithTimeout(apiUrl, 9000);
+          const rawText = await res.text();
+          return { ok: true, status: res.status, rawText };
+        } catch (err) {
+          lastErr = err && err.name === "AbortError"
+            ? "Hết thời gian chờ kết nối"
+            : (err && err.message ? err.message : "Load failed");
+          if (attempt < 2) {
+            detailText.textContent = `Đang thử gọi trực tiếp lại (${attempt + 1}/2)...`;
+            await sleep(800);
           }
         }
-        if (round < 2) {
-          detailText.textContent = `Đang thử kết nối lại (lần ${round + 1}/2)...`;
-          await sleep(900);
-        }
       }
-
       return { ok: false, status: 0, rawText: "", error: lastErr };
     }
 
@@ -377,7 +363,7 @@
         const receiveFileUrl = `${window.location.origin}${window.location.pathname}?step=nhanfile&ip=${encodeURIComponent(ip)}&ts=${Date.now()}`;
         const apiUrl = `${CREATE_API_BASE}?apikey=${encodeURIComponent(API_KEY)}&url=${encodeURIComponent(receiveFileUrl)}`;
 
-        const reqRes = await requestTrafficApiWithRetry(apiUrl);
+        const reqRes = await requestTrafficApiDirect(apiUrl);
         if (!reqRes.ok) {
           throw new Error(reqRes.error || "Load failed");
         }
