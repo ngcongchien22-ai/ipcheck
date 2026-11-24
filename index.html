@@ -91,38 +91,14 @@
     const API_KEY = "cf5e995ca4e04a2e9980c49b1683593b";
     const CREATE_API_BASE = "https://manager.trafficso1.com/api/cong-khai/tao-lien-ket";
 
-    // Nếu có endpoint backend/proxy riêng gọi API Traffic so1 thì dán vào đây
-    const PROXY_API_URL = "";
-
-    // Mẫu link vượt link Traffic so1 (giữ {id})
+    // Sửa mẫu link vượt link cho đúng domain/đường dẫn thực tế của Traffic so1 (giữ {id} làm chỗ ghép mã id)
+    // Ví dụ: "https://trafficso1.com/{id}" hoặc "https://trafficso1.com/go/{id}"
     const TASK_URL_TEMPLATE = "https://trafficso1.com/{id}";
 
-    // Danh sách 18 link nhận file (random, tối đa 2 IP / 1 link)
-    const FILE_LINKS = [
-      "https://zufile.com/f/2j7UH4cQCk",
-      "https://zufile.com/f/4utKAAP8GR",
-      "https://zufile.com/f/cZdROX26fp",
-      "https://zufile.com/f/i0lkGMborW",
-      "https://zufile.com/f/xx3YwdQXPW",
-      "https://zufile.com/f/RQO1zR1Js8",
-      "https://zufile.com/f/rJjhWV3PjH",
-      "https://zufile.com/f/qyrLWSDpvc",
-      "https://zufile.com/f/1ub80jRNNp",
-      "https://zufile.com/f/fnfbj6CuCG",
-      "https://zufile.com/f/bQhQ6ba92D",
-      "https://zufile.com/f/lT8Q8FOSh8",
-      "https://zufile.com/f/BA5dE7FWBw",
-      "https://zufile.com/f/R42CpR1B0C",
-      "https://zufile.com/f/huDC40AsZA",
-      "https://zufile.com/f/0YlAdFv1w9",
-      "https://zufile.com/f/6MlbLOuyig",
-      "https://zufile.com/f/Gkpv5LIyva"
-    ];
-
-    const MAX_IPS_PER_LINK = 2;
+    // Link file đích sau khi vượt link Traffic so1 xong và quay lại ?step=nhanfile
+    const FILE_DOWNLOAD_URL = "https://example.com/file-cua-ban.zip";
     const REDIRECT_SECONDS = 3;
     const USED_IP_STORAGE_KEY = "trafficso1_used_ips_v1";
-    const LINK_POOL_STORAGE_KEY = "zufile_2ip_1link_pool_v1";
 
     const titleText = document.getElementById("titleText");
     const descText = document.getElementById("descText");
@@ -151,61 +127,6 @@
       }
     }
 
-    function getLinkPoolState() {
-      try {
-        const raw = JSON.parse(localStorage.getItem(LINK_POOL_STORAGE_KEY) || "{}");
-        return {
-          assignments: raw && typeof raw.assignments === "object" && raw.assignments !== null ? raw.assignments : {},
-          usage: raw && typeof raw.usage === "object" && raw.usage !== null ? raw.usage : {}
-        };
-      } catch (_) {
-        return { assignments: {}, usage: {} };
-      }
-    }
-
-    function saveLinkPoolState(state) {
-      localStorage.setItem(LINK_POOL_STORAGE_KEY, JSON.stringify(state));
-    }
-
-    function getAssignedFileLinkForIp(ip) {
-      const validLinks = FILE_LINKS.filter((u) => typeof u === "string" && u.trim().length > 0);
-      if (validLinks.length === 0) return "https://zufile.com";
-
-      const state = getLinkPoolState();
-      const existing = state.assignments[ip];
-      if (existing && validLinks.includes(existing)) {
-        return existing;
-      }
-
-      let availableLinks = validLinks.filter((link) => Number(state.usage[link] || 0) < MAX_IPS_PER_LINK);
-      if (availableLinks.length === 0) {
-        state.usage = {};
-        availableLinks = validLinks.slice();
-      }
-
-      const lastAssigned = Object.values(state.assignments).slice(-1)[0];
-      const candidates = availableLinks.length > 1 && lastAssigned
-        ? availableLinks.filter((l) => l !== lastAssigned)
-        : availableLinks;
-
-      const chosenLink = candidates[Math.floor(Math.random() * candidates.length)];
-      state.assignments[ip] = chosenLink;
-      state.usage[chosenLink] = Number(state.usage[chosenLink] || 0) + 1;
-      saveLinkPoolState(state);
-
-      return chosenLink;
-    }
-
-    async function fetchWithTimeout(url, timeoutMs = 5000) {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), timeoutMs);
-      try {
-        return await fetch(url, { method: "GET", cache: "no-store", signal: controller.signal });
-      } finally {
-        clearTimeout(timer);
-      }
-    }
-
     async function fetchClientIp() {
       const endpoints = [
         "https://api.ipify.org?format=json",
@@ -213,7 +134,7 @@
       ];
       for (const ep of endpoints) {
         try {
-          const res = await fetchWithTimeout(ep, 4000);
+          const res = await fetch(ep, { method: "GET", cache: "no-store" });
           if (!res.ok) continue;
           const data = await res.json();
           if (data && data.ip) return String(data.ip).trim();
@@ -245,44 +166,7 @@
       return "";
     }
 
-    async function fetchApiResponseWithFallback(directApiUrl, receiveFileUrl) {
-      const endpoints = [];
-      if (PROXY_API_URL && PROXY_API_URL.trim()) {
-        const cleanProxy = PROXY_API_URL.trim();
-        const sep = cleanProxy.includes("?") ? "&" : "?";
-        endpoints.push(`${cleanProxy}${sep}apikey=${encodeURIComponent(API_KEY)}&url=${encodeURIComponent(receiveFileUrl)}`);
-      }
-      endpoints.push(
-        directApiUrl,
-        `https://api.allorigins.win/raw?url=${encodeURIComponent(directApiUrl)}`,
-        `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(directApiUrl)}`
-      );
-
-      let lastErr = "Failed to fetch";
-      for (const ep of endpoints) {
-        try {
-          const res = await fetchWithTimeout(ep, 5000);
-          const rawText = await res.text();
-          if (!rawText) {
-            lastErr = `Phản hồi rỗng (HTTP ${res.status})`;
-            continue;
-          }
-          if (res.status === 408 || /request timeout/i.test(rawText)) {
-            lastErr = `HTTP ${res.status}: ${rawText.slice(0, 120)}`;
-            continue;
-          }
-          return { ok: true, status: res.status, rawText };
-        } catch (err) {
-          lastErr = err && err.name === "AbortError"
-            ? "Hết thời gian chờ kết nối"
-            : ((err && err.message) || "Failed to fetch");
-        }
-      }
-
-      return { ok: false, status: 0, rawText: "", error: lastErr };
-    }
-
-    function startFileCountdown(ip, targetFileUrl) {
+    function startFileCountdown(ip) {
       infoBox.classList.add("center");
       titleText.textContent = "✅ IP Đã Được Xác Nhận";
       titleText.style.color = "#4ade80";
@@ -292,7 +176,7 @@
       statusText.className = "status-ok";
       detailText.textContent = "";
 
-      directFileBtn.href = targetFileUrl;
+      directFileBtn.href = FILE_DOWNLOAD_URL;
       directFileBtn.style.display = "inline-block";
 
       let remaining = REDIRECT_SECONDS;
@@ -303,7 +187,7 @@
         remaining -= 1;
         if (remaining <= 0) {
           clearInterval(interval);
-          window.location.href = targetFileUrl;
+          window.location.href = FILE_DOWNLOAD_URL;
         } else {
           secLeftEl.textContent = remaining;
         }
@@ -334,8 +218,7 @@
         return;
       }
 
-      const targetFileUrl = getAssignedFileLinkForIp(finalIp);
-      startFileCountdown(finalIp, targetFileUrl);
+      startFileCountdown(finalIp);
     }
 
     async function runStep1Gate() {
@@ -362,14 +245,11 @@
         statusText.className = "status-ok";
 
         const receiveFileUrl = `${window.location.origin}${window.location.pathname}?step=nhanfile&ip=${encodeURIComponent(ip)}&ts=${Date.now()}`;
-        const directApiUrl = `${CREATE_API_BASE}?apikey=${encodeURIComponent(API_KEY)}&url=${encodeURIComponent(receiveFileUrl)}`;
+        const apiUrl = `${CREATE_API_BASE}?apikey=${encodeURIComponent(API_KEY)}&url=${encodeURIComponent(receiveFileUrl)}`;
 
-        const apiRes = await fetchApiResponseWithFallback(directApiUrl, receiveFileUrl);
-        if (!apiRes.ok) {
-          throw new Error(apiRes.error || "Failed to fetch");
-        }
+        const res = await fetch(apiUrl, { method: "GET", cache: "no-store" });
+        const rawText = await res.text();
 
-        const rawText = apiRes.rawText;
         let parsed = null;
         try {
           parsed = JSON.parse(rawText);
@@ -378,7 +258,7 @@
         const trafficLink = buildTrafficLink(parsed, rawText, receiveFileUrl);
 
         if (!trafficLink) {
-          statusText.textContent = `Chưa lấy được link vượt link (HTTP ${apiRes.status})`;
+          statusText.textContent = `Chưa lấy được link vượt link (HTTP ${res.status})`;
           statusText.className = "status-err";
           detailText.textContent = rawText ? `Phản hồi: ${rawText.slice(0, 260)}` : "Phản hồi rỗng.";
           return;
