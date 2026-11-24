@@ -64,6 +64,8 @@
       color: #fff;
       text-decoration: none;
       font-size: 14px;
+      border: none;
+      cursor: pointer;
     }
   </style>
 </head>
@@ -84,6 +86,7 @@
 
     <div style="text-align: center;">
       <a id="directFileBtn" class="btn" href="#" style="display: none;">Mở Link File Ngay</a>
+      <button id="retryBtn" class="btn" type="button" style="display: none;" onclick="window.location.reload()">Thử Lại</button>
     </div>
   </div>
 
@@ -91,11 +94,13 @@
     const API_KEY = "cf5e995ca4e04a2e9980c49b1683593b";
     const CREATE_API_BASE = "https://manager.trafficso1.com/api/cong-khai/tao-lien-ket";
 
-    // Sửa mẫu link vượt link cho đúng domain/đường dẫn thực tế của Traffic so1 (giữ {id} làm chỗ ghép mã id)
-    // Ví dụ: "https://trafficso1.com/{id}" hoặc "https://trafficso1.com/go/{id}"
+    // Nếu bạn có backend/proxy riêng (vd: https://domain-cua-ban.com/api/create-link?url=...), hãy điền vào đây
+    const CUSTOM_PROXY_BASE = "";
+
+    // Mẫu link vượt link (giữ {id} làm chỗ ghép mã id nếu API không trả link đầy đủ)
     const TASK_URL_TEMPLATE = "https://trafficso1.com/{id}";
 
-    // Link file đích sau khi vượt link Traffic so1 xong và quay lại ?step=nhanfile
+    // Link file đích sau khi vượt link xong
     const FILE_DOWNLOAD_URL = "https://example.com/file-cua-ban.zip";
     const REDIRECT_SECONDS = 3;
     const USED_IP_STORAGE_KEY = "trafficso1_used_ips_v1";
@@ -110,6 +115,14 @@
     const secLeftEl = document.getElementById("secLeft");
     const manualLink = document.getElementById("manualLink");
     const directFileBtn = document.getElementById("directFileBtn");
+    const retryBtn = document.getElementById("retryBtn");
+
+    function showError(statusMsg, detailMsg) {
+      statusText.textContent = statusMsg;
+      statusText.className = "status-err";
+      detailText.textContent = detailMsg || "";
+      retryBtn.style.display = "inline-block";
+    }
 
     function getUsedIps() {
       try {
@@ -143,21 +156,70 @@
       return "";
     }
 
+    async function fetchCreateApi(targetUrl) {
+      const directUrl = `${CREATE_API_BASE}?apikey=${encodeURIComponent(API_KEY)}&url=${encodeURIComponent(targetUrl)}`;
+
+      // 1. Nếu có backend riêng thì ưu tiên gọi backend
+      if (CUSTOM_PROXY_BASE) {
+        const sep = CUSTOM_PROXY_BASE.includes("?") ? "&" : "?";
+        const res = await fetch(`${CUSTOM_PROXY_BASE}${sep}url=${encodeURIComponent(targetUrl)}`, {
+          method: "GET",
+          cache: "no-store"
+        });
+        return { status: res.status, text: await res.text() };
+      }
+
+      // 2. Thử gọi trực tiếp trước
+      try {
+        const res = await fetch(directUrl, { method: "GET", cache: "no-store" });
+        return { status: res.status, text: await res.text() };
+      } catch (directErr) {
+        // 3. Nếu bị chặn CORS (Failed to fetch), thử qua proxy dự phòng
+        const fallbackProxies = [
+          `https://corsproxy.io/?${encodeURIComponent(directUrl)}`,
+          `https://api.allorigins.win/raw?url=${encodeURIComponent(directUrl)}`
+        ];
+
+        for (const proxyUrl of fallbackProxies) {
+          try {
+            const res = await fetch(proxyUrl, { method: "GET", cache: "no-store" });
+            if (res.ok) {
+              return { status: res.status, text: await res.text() };
+            }
+          } catch (_) {}
+        }
+
+        throw new Error(
+          "Không thể gọi trực tiếp tới API (có thể do chặn CORS hoặc mạng). Nên gọi API qua backend riêng."
+        );
+      }
+    }
+
     function buildTrafficLink(parsed, rawText, forbiddenUrl) {
       if (parsed && typeof parsed === "object") {
-        for (const key of ["short_url", "shortenedUrl", "short_link", "shortLink", "task_url", "traffic_url", "link"]) {
-          const val = parsed[key];
-          if (typeof val === "string" && /^https?:\/\//i.test(val.trim()) && val.trim() !== forbiddenUrl && !val.includes("step=nhanfile")) {
-            return val.trim();
+        // Tìm các trường link phổ biến (kể cả lồng trong data)
+        const candidates = [parsed, parsed.data].filter(Boolean);
+        for (const obj of candidates) {
+          if (typeof obj !== "object") continue;
+          for (const key of ["short_url", "shortenedUrl", "short_link", "shortLink", "task_url", "traffic_url", "url", "link"]) {
+            const val = obj[key];
+            if (
+              typeof val === "string" &&
+              /^https?:\/\//i.test(val.trim()) &&
+              val.trim() !== forbiddenUrl &&
+              !val.includes("step=nhanfile")
+            ) {
+              return val.trim();
+            }
           }
-        }
-        if (parsed.id && typeof parsed.id === "string") {
-          return TASK_URL_TEMPLATE.replace("{id}", encodeURIComponent(parsed.id.trim()));
+          if (obj.id !== undefined && obj.id !== null && String(obj.id).trim() !== "") {
+            return TASK_URL_TEMPLATE.replace("{id}", encodeURIComponent(String(obj.id).trim()));
+          }
         }
       }
 
       if (typeof rawText === "string") {
-        const idMatch = rawText.match(/"id"\s*:\s*"([^"]+)"/);
+        const idMatch = rawText.match(/"id"\s*:\s*"?([^",\s}]+)"?/);
         if (idMatch && idMatch[1]) {
           return TASK_URL_TEMPLATE.replace("{id}", encodeURIComponent(idMatch[1].trim()));
         }
@@ -203,18 +265,17 @@
 
       if (!finalIp) {
         ipText.textContent = "Không rõ";
-        statusText.textContent = "Không xác nhận được IP";
-        statusText.className = "status-err";
-        detailText.textContent = "Vui lòng kiểm tra kết nối mạng hoặc thử lại.";
+        showError("Không xác nhận được IP", "Vui lòng kiểm tra kết nối mạng hoặc thử lại.");
         return;
       }
 
       ipText.textContent = finalIp;
 
       if (passedIp && detectedIp && passedIp !== detectedIp) {
-        statusText.textContent = "IP không khớp phiên ban đầu";
-        statusText.className = "status-err";
-        detailText.textContent = `IP lúc tạo link: ${passedIp} | IP hiện tại: ${detectedIp}`;
+        showError(
+          "IP không khớp phiên ban đầu",
+          `IP lúc tạo link: ${passedIp} | IP hiện tại: ${detectedIp}`
+        );
         return;
       }
 
@@ -235,9 +296,7 @@
         ipText.textContent = ip;
 
         if (getUsedIps().includes(ip)) {
-          statusText.textContent = "IP đã sử dụng";
-          statusText.className = "status-err";
-          detailText.textContent = "IP này đã được xác nhận trước đó. Vui lòng đổi IP khác.";
+          showError("IP đã sử dụng", "IP này đã được xác nhận trước đó. Vui lòng đổi IP khác.");
           return;
         }
 
@@ -245,10 +304,7 @@
         statusText.className = "status-ok";
 
         const receiveFileUrl = `${window.location.origin}${window.location.pathname}?step=nhanfile&ip=${encodeURIComponent(ip)}&ts=${Date.now()}`;
-        const apiUrl = `${CREATE_API_BASE}?apikey=${encodeURIComponent(API_KEY)}&url=${encodeURIComponent(receiveFileUrl)}`;
-
-        const res = await fetch(apiUrl, { method: "GET", cache: "no-store" });
-        const rawText = await res.text();
+        const { status, text: rawText } = await fetchCreateApi(receiveFileUrl);
 
         let parsed = null;
         try {
@@ -258,9 +314,10 @@
         const trafficLink = buildTrafficLink(parsed, rawText, receiveFileUrl);
 
         if (!trafficLink) {
-          statusText.textContent = `Chưa lấy được link vượt link (HTTP ${res.status})`;
-          statusText.className = "status-err";
-          detailText.textContent = rawText ? `Phản hồi: ${rawText.slice(0, 260)}` : "Phản hồi rỗng.";
+          showError(
+            `Chưa lấy được link vượt link (HTTP ${status})`,
+            rawText ? `Phản hồi: ${rawText.slice(0, 260)}` : "Phản hồi rỗng."
+          );
           return;
         }
 
@@ -272,9 +329,7 @@
 
         window.location.href = trafficLink;
       } catch (err) {
-        statusText.textContent = "Lỗi gọi API tạo link";
-        statusText.className = "status-err";
-        detailText.textContent = err.message || "Lỗi không xác định.";
+        showError("Lỗi gọi API tạo link", err.message || "Lỗi không xác định.");
       }
     }
 
