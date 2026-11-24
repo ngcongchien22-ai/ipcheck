@@ -92,13 +92,34 @@
     const CREATE_API_BASE = "https://manager.trafficso1.com/api/cong-khai/tao-lien-ket";
 
     // Sửa mẫu link vượt link cho đúng domain/đường dẫn thực tế của Traffic so1 (giữ {id} làm chỗ ghép mã id)
-    // Ví dụ: "https://trafficso1.com/{id}" hoặc "https://trafficso1.com/go/{id}"
     const TASK_URL_TEMPLATE = "https://trafficso1.com/{id}";
 
-    // Link file đích sau khi vượt link Traffic so1 xong và quay lại ?step=nhanfile
-    const FILE_DOWNLOAD_URL = "https://zufile.com/f/Gkpv5LIyva";
+    // Danh sách link nhận file (random theo các link khác nhau, tối đa 2 IP / 1 link)
+    const FILE_LINKS = [
+      "https://zufile.com/f/2j7UH4cQCk",
+      "https://zufile.com/f/4utKAAP8GR",
+      "https://zufile.com/f/cZdROX26fp",
+      "https://zufile.com/f/i0lkGMborW",
+      "https://zufile.com/f/xx3YwdQXPW",
+      "https://zufile.com/f/RQO1zR1Js8",
+      "https://zufile.com/f/rJjhWV3PjH",
+      "https://zufile.com/f/qyrLWSDpvc",
+      "https://zufile.com/f/1ub80jRNNp",
+      "https://zufile.com/f/fnfbj6CuCG",
+      "https://zufile.com/f/bQhQ6ba92D",
+      "https://zufile.com/f/lT8Q8FOSh8",
+      "https://zufile.com/f/BA5dE7FWBw",
+      "https://zufile.com/f/R42CpR1B0C",
+      "https://zufile.com/f/huDC40AsZA",
+      "https://zufile.com/f/0YlAdFv1w9",
+      "https://zufile.com/f/6MlbLOuyig",
+      "https://zufile.com/f/Gkpv5LIyva"
+    ];
+
+    const MAX_IPS_PER_LINK = 2;
     const REDIRECT_SECONDS = 3;
     const USED_IP_STORAGE_KEY = "trafficso1_used_ips_v1";
+    const LINK_POOL_STORAGE_KEY = "zufile_2ip_1link_pool_v1";
 
     const titleText = document.getElementById("titleText");
     const descText = document.getElementById("descText");
@@ -125,6 +146,60 @@
         list.push(ip);
         localStorage.setItem(USED_IP_STORAGE_KEY, JSON.stringify(list));
       }
+    }
+
+    function getLinkPoolState() {
+      try {
+        const raw = JSON.parse(localStorage.getItem(LINK_POOL_STORAGE_KEY) || "{}");
+        return {
+          assignments: raw && typeof raw.assignments === "object" && raw.assignments !== null ? raw.assignments : {},
+          usage: raw && typeof raw.usage === "object" && raw.usage !== null ? raw.usage : {}
+        };
+      } catch (_) {
+        return { assignments: {}, usage: {} };
+      }
+    }
+
+    function saveLinkPoolState(state) {
+      localStorage.setItem(LINK_POOL_STORAGE_KEY, JSON.stringify(state));
+    }
+
+    function getAssignedFileLinkForIp(ip) {
+      const validLinks = FILE_LINKS.filter((u) => typeof u === "string" && u.trim().length > 0);
+      if (validLinks.length === 0) return "https://zufile.com";
+
+      const state = getLinkPoolState();
+
+      // Nếu IP này đã được gán link trước đó và link vẫn nằm trong danh sách hợp lệ thì dùng lại link đó
+      const existing = state.assignments[ip];
+      if (existing && validLinks.includes(existing)) {
+        return existing;
+      }
+
+      // Lọc các link còn slot (< MAX_IPS_PER_LINK IP)
+      let availableLinks = validLinks.filter((link) => {
+        const count = Number(state.usage[link] || 0);
+        return count < MAX_IPS_PER_LINK;
+      });
+
+      // Nếu toàn bộ danh sách đều đã đạt 2 IP / 1 link thì reset bộ đếm để tiếp tục xoay vòng random
+      if (availableLinks.length === 0) {
+        state.usage = {};
+        availableLinks = validLinks.slice();
+      }
+
+      // Tránh lặp lại ngay link vừa gán gần nhất nếu còn nhiều lựa chọn
+      const lastAssigned = Object.values(state.assignments).slice(-1)[0];
+      const candidates = availableLinks.length > 1 && lastAssigned
+        ? availableLinks.filter((l) => l !== lastAssigned)
+        : availableLinks;
+
+      const chosenLink = candidates[Math.floor(Math.random() * candidates.length)];
+      state.assignments[ip] = chosenLink;
+      state.usage[chosenLink] = Number(state.usage[chosenLink] || 0) + 1;
+      saveLinkPoolState(state);
+
+      return chosenLink;
     }
 
     async function fetchClientIp() {
@@ -166,17 +241,17 @@
       return "";
     }
 
-    function startFileCountdown(ip) {
+    function startFileCountdown(ip, targetFileUrl) {
       infoBox.classList.add("center");
       titleText.textContent = "✅ IP Đã Được Xác Nhận";
       titleText.style.color = "#4ade80";
-      descText.textContent = "Vượt link hoàn tất. Đang chuyển hướng đến trang nhận file...";
+      descText.textContent = "Vượt link hoàn tất. Đang chuyển hướng đến link nhận file...";
       ipText.textContent = ip;
       statusText.textContent = "Đã xác nhận IP";
       statusText.className = "status-ok";
-      detailText.textContent = "";
+      detailText.textContent = `Link đích: ${targetFileUrl}`;
 
-      directFileBtn.href = FILE_DOWNLOAD_URL;
+      directFileBtn.href = targetFileUrl;
       directFileBtn.style.display = "inline-block";
 
       let remaining = REDIRECT_SECONDS;
@@ -187,7 +262,7 @@
         remaining -= 1;
         if (remaining <= 0) {
           clearInterval(interval);
-          window.location.href = FILE_DOWNLOAD_URL;
+          window.location.href = targetFileUrl;
         } else {
           secLeftEl.textContent = remaining;
         }
@@ -218,7 +293,8 @@
         return;
       }
 
-      startFileCountdown(finalIp);
+      const targetFileUrl = getAssignedFileLinkForIp(finalIp);
+      startFileCountdown(finalIp, targetFileUrl);
     }
 
     async function runStep1Gate() {
