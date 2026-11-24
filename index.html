@@ -57,7 +57,7 @@
     }
     .btn {
       display: inline-block;
-      margin-top: 10px;
+      margin: 6px 4px 0;
       padding: 10px 16px;
       border-radius: 8px;
       background: #0284c7;
@@ -66,6 +66,9 @@
       font-size: 14px;
       border: 0;
       cursor: pointer;
+    }
+    .btn-secondary {
+      background: #334155;
     }
   </style>
 </head>
@@ -86,6 +89,7 @@
 
     <div style="text-align: center;">
       <a id="directFileBtn" class="btn" href="#" style="display: none;">Mở Link File Ngay</a>
+      <a id="openApiBtn" class="btn btn-secondary" href="#" target="_blank" rel="noopener" style="display: none;">Mở Link API Trực Tiếp</a>
       <button id="retryBtn" class="btn" type="button" style="display: none;">Thử Lại Ngay</button>
     </div>
   </div>
@@ -93,8 +97,14 @@
   <script>
     const API_KEY = "cf5e995ca4e04a2e9980c49b1683593b";
     const CREATE_API_BASE = "https://manager.trafficso1.com/api/cong-khai/tao-lien-ket";
+
+    // Tùy chọn: nếu có endpoint backend/worker riêng (nhận ?url=... hoặc ?apikey=...&url=...), điền vào đây để tránh chặn CORS
+    const PROXY_API_URL = "";
+
+    // Sửa mẫu link vượt link cho đúng domain/đường dẫn của Traffic so1 (giữ {id})
     const TASK_URL_TEMPLATE = "https://trafficso1.com/{id}";
 
+    // Danh sách 18 link nhận file (random, tối đa 2 IP / 1 link)
     const FILE_LINKS = [
       "https://zufile.com/f/2j7UH4cQCk",
       "https://zufile.com/f/4utKAAP8GR",
@@ -131,6 +141,7 @@
     const secLeftEl = document.getElementById("secLeft");
     const manualLink = document.getElementById("manualLink");
     const directFileBtn = document.getElementById("directFileBtn");
+    const openApiBtn = document.getElementById("openApiBtn");
     const retryBtn = document.getElementById("retryBtn");
 
     retryBtn.addEventListener("click", () => {
@@ -202,7 +213,7 @@
       return chosenLink;
     }
 
-    async function fetchWithTimeout(url, timeoutMs = 9000) {
+    async function fetchWithTimeout(url, timeoutMs = 8000) {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), timeoutMs);
       try {
@@ -231,7 +242,7 @@
             if (data && data.ip) return String(data.ip).trim();
           } catch (_) {}
         }
-        await sleep(500);
+        await sleep(400);
       }
       return "";
     }
@@ -259,11 +270,27 @@
       return "";
     }
 
-    async function requestTrafficApiDirect(apiUrl) {
+    function buildRequestTarget(receiveFileUrl) {
+      const directApiUrl = `${CREATE_API_BASE}?apikey=${encodeURIComponent(API_KEY)}&url=${encodeURIComponent(receiveFileUrl)}`;
+      if (PROXY_API_URL && PROXY_API_URL.trim()) {
+        const cleanProxy = PROXY_API_URL.trim();
+        const sep = cleanProxy.includes("?") ? "&" : "?";
+        return {
+          fetchUrl: `${cleanProxy}${sep}apikey=${encodeURIComponent(API_KEY)}&url=${encodeURIComponent(receiveFileUrl)}`,
+          directApiUrl
+        };
+      }
+      return {
+        fetchUrl: directApiUrl,
+        directApiUrl
+      };
+    }
+
+    async function requestTrafficApi(fetchUrl) {
       let lastErr = "Load failed";
       for (let attempt = 1; attempt <= 2; attempt++) {
         try {
-          const res = await fetchWithTimeout(apiUrl, 9000);
+          const res = await fetchWithTimeout(fetchUrl, 8000);
           const rawText = await res.text();
           return { ok: true, status: res.status, rawText };
         } catch (err) {
@@ -271,8 +298,8 @@
             ? "Hết thời gian chờ kết nối"
             : (err && err.message ? err.message : "Load failed");
           if (attempt < 2) {
-            detailText.textContent = `Đang thử gọi trực tiếp lại (${attempt + 1}/2)...`;
-            await sleep(800);
+            detailText.textContent = `Đang thử lại (${attempt + 1}/2)...`;
+            await sleep(700);
           }
         }
       }
@@ -361,11 +388,13 @@
         statusText.className = "status-ok";
 
         const receiveFileUrl = `${window.location.origin}${window.location.pathname}?step=nhanfile&ip=${encodeURIComponent(ip)}&ts=${Date.now()}`;
-        const apiUrl = `${CREATE_API_BASE}?apikey=${encodeURIComponent(API_KEY)}&url=${encodeURIComponent(receiveFileUrl)}`;
+        const { fetchUrl, directApiUrl } = buildRequestTarget(receiveFileUrl);
+        openApiBtn.href = directApiUrl;
 
-        const reqRes = await requestTrafficApiDirect(apiUrl);
+        const reqRes = await requestTrafficApi(fetchUrl);
         if (!reqRes.ok) {
-          throw new Error(reqRes.error || "Load failed");
+          openApiBtn.style.display = "inline-block";
+          throw new Error(`${reqRes.error || "Load failed"} (API từ chối gọi fetch trực tiếp từ trình duyệt)`);
         }
 
         const rawText = reqRes.rawText;
@@ -380,6 +409,7 @@
           statusText.textContent = `Chưa lấy được link vượt link (HTTP ${reqRes.status})`;
           statusText.className = "status-err";
           detailText.textContent = rawText ? `Phản hồi: ${rawText.slice(0, 260)}` : "Phản hồi rỗng.";
+          openApiBtn.style.display = "inline-block";
           retryBtn.style.display = "inline-block";
           return;
         }
