@@ -94,7 +94,29 @@
     const API_KEY = "cf5e995ca4e04a2e9980c49b1683593b";
     const CREATE_API_BASE = "https://manager.trafficso1.com/api/cong-khai/tao-lien-ket";
     const TASK_URL_TEMPLATE = "https://trafficso1.com/{id}";
-    const FILE_DOWNLOAD_URL = "https://example.com/file-cua-ban.zip";
+
+    // Danh sách link file đích (chọn ngẫu nhiên khi chuyển hướng)
+    const FILE_DOWNLOAD_URLS = [
+      "https://zufile.com/f/2j7UH4cQCk",
+      "https://zufile.com/f/4utKAAP8GR",
+      "https://zufile.com/f/cZdROX26fp",
+      "https://zufile.com/f/i0lkGMborW",
+      "https://zufile.com/f/xx3YwdQXPW",
+      "https://zufile.com/f/RQO1zR1Js8",
+      "https://zufile.com/f/rJjhWV3PjH",
+      "https://zufile.com/f/qyrLWSDpvc",
+      "https://zufile.com/f/1ub80jRNNp",
+      "https://zufile.com/f/fnfbj6CuCG",
+      "https://zufile.com/f/bQhQ6ba92D",
+      "https://zufile.com/f/lT8Q8FOSh8",
+      "https://zufile.com/f/BA5dE7FWBw",
+      "https://zufile.com/f/R42CpR1B0C",
+      "https://zufile.com/f/huDC40AsZA",
+      "https://zufile.com/f/0YlAdFv1w9",
+      "https://zufile.com/f/6MlbLOuyig",
+      "https://zufile.com/f/Gkpv5LIyva"
+    ];
+
     const REDIRECT_SECONDS = 3;
     const USED_IP_STORAGE_KEY = "trafficso1_used_ips_v1";
 
@@ -109,6 +131,11 @@
     const manualLink = document.getElementById("manualLink");
     const directFileBtn = document.getElementById("directFileBtn");
     const retryBtn = document.getElementById("retryBtn");
+
+    function getRandomFileUrl() {
+      const idx = Math.floor(Math.random() * FILE_DOWNLOAD_URLS.length);
+      return FILE_DOWNLOAD_URLS[idx];
+    }
 
     function showError(statusMsg, detailMsg) {
       statusText.textContent = statusMsg;
@@ -208,6 +235,8 @@
     }
 
     function startFileCountdown(ip) {
+      const selectedFileUrl = getRandomFileUrl();
+
       infoBox.classList.add("center");
       titleText.textContent = "✅ IP Đã Được Xác Nhận";
       titleText.style.color = "#4ade80";
@@ -217,7 +246,7 @@
       statusText.className = "status-ok";
       detailText.textContent = "";
 
-      directFileBtn.href = FILE_DOWNLOAD_URL;
+      directFileBtn.href = selectedFileUrl;
       directFileBtn.style.display = "inline-block";
 
       let remaining = REDIRECT_SECONDS;
@@ -228,7 +257,7 @@
         remaining -= 1;
         if (remaining <= 0) {
           clearInterval(interval);
-          window.location.href = FILE_DOWNLOAD_URL;
+          window.location.href = selectedFileUrl;
         } else {
           secLeftEl.textContent = remaining;
         }
