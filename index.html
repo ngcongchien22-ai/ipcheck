@@ -77,8 +77,8 @@
     <p class="desc" id="descText">Vui lòng chờ...</p>
 
     <div class="box" id="infoBox">
-      <div>.... <strong id="ipText">Đang kiểm tra...</strong></div>
-      <div>.... <span id="statusText" class="status-wait">Đang xác nhận...</span></div>
+      <div> <strong id="ipText">Đang kiểm tra...</strong></div>
+      <div> <span id="statusText" class="status-wait">Đang xác nhận...</span></div>
       <div id="noteBox" class="note-box"></div>
       <div id="detailText" style="margin-top: 6px; color: #cbd5e1; font-size: 13px;"></div>
       <div class="countdown" id="countdownBox" style="display: none;">
@@ -461,7 +461,7 @@
 
       if (!finalIp) {
         if (ipText) ipText.textContent = "Không rõ";
-        showError("Không xác nhận được file", "Vui lòng kiểm tra kết nối mạng hoặc thử lại.");
+        showError("Không xác nhận được file", "Vui lòng thử lại.");
         return;
       }
 
@@ -503,8 +503,8 @@
             : sheetNote.note;
           await notifyAdminOnIpChecked(ip, `Chặn IP trùng (${sheetNote.note})`, chatId, userName);
           showError(
-            "IP bị trùng — Không cho vượt link",
-            "IP này đã bị lỗi.",
+            " lỗi ",
+            " ",
             noteDisplay,
             true
           );
@@ -515,9 +515,9 @@
         if (isIpBlockedLocally(ip)) {
           await notifyAdminOnIpChecked(ip, "Chặn IP trùng (lỗi)", chatId, userName);
           showError(
-            "lỗi",
-            "IP này đã được xác nhận trước đó.",
-            "lỗi",
+            " ",
+            " lỗi ",
+            " ",
             true
           );
           return;
