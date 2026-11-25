@@ -373,7 +373,7 @@
     <header class="topbar">
       <div class="brand">
         <span class="brand-dot"></span>
-        <span id="brandLabel">CHICONGDZ V6</span>
+        <span id="brandLabel">dv mod </span>
       </div>
 
       <div id="langSwitch" class="lang-switch" data-lang="vi" role="button" tabindex="0" onclick="toggleLanguage()">
@@ -394,9 +394,7 @@
         <label for="appSelect" id="appLabel">Ứng dụng</label>
         <div class="select-wrap">
           <select id="appSelect">
-            <option value="CHICONGDZ V6">CHICONGDZ V6</option>
-            <option value="Overlay Mod Pro">Overlay Mod Pro</option>
-            <option value="Script Tool VIP">Script Tool VIP</option>
+            <option value="dv mod">dv mod</option>
           </select>
         </div>
       </div>
@@ -406,7 +404,6 @@
         <div class="select-wrap">
           <select id="methodSelect">
             <option value="TrafficSo1">TrafficSo1</option>
-            <option value="Link4M">Link4M</option>
           </select>
         </div>
       </div>
@@ -921,7 +918,7 @@
 
     function renderKeyResult(ip, keyRecord, appName) {
       currentKeyString = keyRecord.key;
-      setStatus("ok", "Đã tự tạo Key vào sever key & ghi log note ip");
+      setStatus("ok", "Đã tự tạo Key vào sever key");
       detailText.textContent = appName ? `Ứng dụng: ${appName}` : "Key đã sẵn sàng sử dụng.";
 
       keyBox.style.display = "block";
@@ -932,7 +929,7 @@
 
     async function runStepAfterRedirect(passedIp, chatId, userName, sessionId, appName, methodName) {
       getKeyBtn.disabled = true;
-      setStatus("wait", "Chuyển hướng thành công — Đang tự tạo Key vào Google Sheet...");
+      setStatus("wait", "Chuyển hướng thành công — Đang tự tạo Key...");
 
       const detectedIp = await fetchClientIp();
       const finalIp = detectedIp || passedIp;
