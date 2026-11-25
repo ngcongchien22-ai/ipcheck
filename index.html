@@ -98,9 +98,8 @@
     const CREATE_API_BASE = "https://manager.trafficso1.com/api/cong-khai/tao-lien-ket";
     const TASK_URL_TEMPLATE = "https://trafficso1.com/{id}";
 
-    // File note IP trên web & endpoint tự ghi note vào ip_notes.json
-    const IP_NOTES_FILE_URL = "./ip_notes.json";
-    const SAVE_NOTE_API_URL = "./save_note.php";
+    // Google Apps Script Web App đọc & tự ghi note IP vào Google Sheet
+    const SCRIPT_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwKQXHkp5IOEu89YxuHns2CO1X4a4qDcYyWm3Usnx-luKYETZUjeII6Zox4vsYBL9ez/exec";
 
     // Thời gian hết hạn chặn IP trùng tính bằng giờ (0 = chặn vĩnh viễn)
     const IP_BLOCK_HOURS = 24;
@@ -277,58 +276,40 @@
       return "";
     }
 
-    // Đọc file ip_notes.json trên web để kiểm tra trùng và lấy note
-    async function findNoteFromWebFile(ip) {
-      if (!IP_NOTES_FILE_URL || !ip) return null;
+    // Đọc note IP từ Google Sheet qua Apps Script để kiểm tra trùng
+    async function findNoteFromSheet(ip) {
+      if (!SCRIPT_WEB_APP_URL || !ip) return null;
       try {
-        const sep = IP_NOTES_FILE_URL.includes("?") ? "&" : "?";
-        const res = await fetchWithTimeout(`${IP_NOTES_FILE_URL}${sep}_t=${Date.now()}`, 6000);
+        const sep = SCRIPT_WEB_APP_URL.includes("?") ? "&" : "?";
+        const res = await fetchWithTimeout(
+          `${SCRIPT_WEB_APP_URL}${sep}ip=${encodeURIComponent(ip)}&_t=${Date.now()}`,
+          7000
+        );
         if (!res.ok) return null;
-
         const data = await res.json();
-        if (!data || typeof data !== "object") return null;
-
-        let rawEntry = null;
-        if (Object.prototype.hasOwnProperty.call(data, ip)) {
-          rawEntry = data[ip];
-        } else if (Array.isArray(data)) {
-          rawEntry = data.find(item => item && String(item.ip || "").trim() === ip) || null;
-        }
-
-        if (!rawEntry) return null;
-
-        if (typeof rawEntry === "string") {
-          return { note: rawEntry, updatedAt: "" };
-        }
-
-        if (typeof rawEntry === "object") {
-          const savedAt = rawEntry.updated_at || rawEntry.time || "";
-          if (IP_BLOCK_HOURS > 0 && rawEntry.ts) {
-            const elapsedHours = (Date.now() - Number(rawEntry.ts)) / (1000 * 60 * 60);
-            if (elapsedHours >= IP_BLOCK_HOURS) return null;
-          }
+        if (data && data.ok && data.used) {
           return {
-            note: rawEntry.note || rawEntry.reason || "IP đã có trong file note",
-            updatedAt: savedAt
+            note: data.note || "IP đã có ghi chú trong Sheet",
+            updatedAt: data.updated_at || ""
           };
         }
-
-        return { note: "IP đã có trong file note", updatedAt: "" };
+        return null;
       } catch (_) {
         return null;
       }
     }
 
-    // Tự động ghi IP + note vào file ip_notes.json qua SAVE_NOTE_API_URL
-    async function autoSaveNoteToFile(ip, note, chatId = "", userName = "", sessionId = "") {
+    // Tự động ghi IP + note vào Google Sheet qua Apps Script
+    async function autoSaveNoteToSheet(ip, note, chatId = "", userName = "", sessionId = "") {
       if (!ip) return;
       saveUsedIpLocally(ip, note);
 
-      if (!SAVE_NOTE_API_URL) return;
+      if (!SCRIPT_WEB_APP_URL) return;
       try {
-        await fetch(SAVE_NOTE_API_URL, {
+        await fetch(SCRIPT_WEB_APP_URL, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          mode: "no-cors",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
           keepalive: true,
           body: JSON.stringify({
             ip,
@@ -485,7 +466,7 @@
       }
 
       if (ipText) ipText.textContent = finalIp;
-      await autoSaveNoteToFile(finalIp, "Đã hoàn tất nhận file", chatId, userName, sessionId);
+      await autoSaveNoteToSheet(finalIp, "Đã hoàn tất nhận file", chatId, userName, sessionId);
       await notifyAdminOnIpChecked(finalIp, "Xác nhận IP nhận file", chatId, userName);
 
       const selectedFileUrl = getRandomFileUrl();
@@ -514,23 +495,23 @@
         if (!ip) throw new Error("Không thể lấy địa chỉ IP của bạn.");
         if (ipText) ipText.textContent = ip;
 
-        // 1. Check IP trùng trong ip_notes.json ngay khi vào link
-        const fileNote = await findNoteFromWebFile(ip);
-        if (fileNote) {
-          const noteDisplay = fileNote.updatedAt
-            ? `${fileNote.note} (${fileNote.updatedAt})`
-            : fileNote.note;
-          await notifyAdminOnIpChecked(ip, `Chặn IP trùng (${fileNote.note})`, chatId, userName);
+        // 1. Check IP trùng trong Google Sheet ngay khi vào link
+        const sheetNote = await findNoteFromSheet(ip);
+        if (sheetNote) {
+          const noteDisplay = sheetNote.updatedAt
+            ? `${sheetNote.note} (${sheetNote.updatedAt})`
+            : sheetNote.note;
+          await notifyAdminOnIpChecked(ip, `Chặn IP trùng (${sheetNote.note})`, chatId, userName);
           showError(
             "IP bị trùng — Không cho tạo link",
-            "IP này đã có ghi chú trong ip_notes.json nên không thể tạo link vượt.",
+            "IP này đã có ghi chú trong hệ thống nên không thể tạo link vượt.",
             noteDisplay,
             true
           );
           return;
         }
 
-        // 2. Check dự phòng localStorage
+        // 2. Check dự phòng trên trình duyệt hiện tại
         if (isIpBlockedLocally(ip)) {
           await notifyAdminOnIpChecked(ip, "Chặn IP trùng (localStorage)", chatId, userName);
           showError(
@@ -544,8 +525,8 @@
 
         const sessionId = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
-        // Tự động ghi note IP vào ip_notes.json ngay khi IP hợp lệ
-        await autoSaveNoteToFile(
+        // Tự động ghi note IP vào Google Sheet ngay khi IP hợp lệ
+        await autoSaveNoteToSheet(
           ip,
           userName ? `Đã tạo link vượt cho ${userName}` : "Đã tạo link vượt",
           chatId,
