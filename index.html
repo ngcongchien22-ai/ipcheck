@@ -37,6 +37,16 @@
     .status-wait { color: #facc15; font-weight: bold; }
     .status-err { color: #f87171; font-weight: bold; }
     .status-ok { color: #4ade80; font-weight: bold; }
+    .note-box {
+      margin-top: 8px;
+      padding: 8px 10px;
+      border-radius: 6px;
+      background: rgba(248, 113, 113, 0.12);
+      border: 1px solid rgba(248, 113, 113, 0.35);
+      color: #fecaca;
+      font-size: 13px;
+      display: none;
+    }
     .card .countdown { margin-top: 8px; color: #38bdf8; font-weight: bold; }
     .card .link-out {
       display: inline-block;
@@ -69,6 +79,7 @@
     <div class="box" id="infoBox">
       <div>IP của bạn: <strong id="ipText">Đang kiểm tra...</strong></div>
       <div>Trạng thái: <span id="statusText" class="status-wait">Đang xác nhận...</span></div>
+      <div id="noteBox" class="note-box"></div>
       <div id="detailText" style="margin-top: 6px; color: #cbd5e1; font-size: 13px;"></div>
       <div class="countdown" id="countdownBox" style="display: none;">
         Chuyển hướng sau <span id="secLeft">3</span>s
@@ -87,11 +98,11 @@
     const CREATE_API_BASE = "https://manager.trafficso1.com/api/cong-khai/tao-lien-ket";
     const TASK_URL_TEMPLATE = "https://trafficso1.com/{id}";
 
-    // Tùy chọn kiểm tra IP trùng qua server/API (để trống "" nếu chỉ dùng localStorage)
-    // Nếu có API: GET `${IP_CHECK_API}?ip=...` trả về { "used": true/false } và POST lưu IP
-    const IP_CHECK_API = "";
+    // File note IP trên web & endpoint tự ghi note vào ip_notes.json
+    const IP_NOTES_FILE_URL = "./ip_notes.json";
+    const SAVE_NOTE_API_URL = "./save_note.php";
 
-    // Thời gian hết hạn chặn IP trùng tính bằng giờ (0 = chặn vĩnh viễn trên localStorage)
+    // Thời gian hết hạn chặn IP trùng tính bằng giờ (0 = chặn vĩnh viễn)
     const IP_BLOCK_HOURS = 24;
 
     // Cấu hình Bot Telegram
@@ -127,6 +138,7 @@
     const descText = document.getElementById("descText");
     const ipText = document.getElementById("ipText");
     const statusText = document.getElementById("statusText");
+    const noteBox = document.getElementById("noteBox");
     const detailText = document.getElementById("detailText");
     const countdownBox = document.getElementById("countdownBox");
     const secLeftEl = document.getElementById("secLeft");
@@ -171,8 +183,17 @@
       statusText.textContent = msg;
     }
 
-    function showError(statusMsg, detailMsg, hideRetry = false) {
+    function showError(statusMsg, detailMsg, noteMsg = "", hideRetry = false) {
       setStatus("err", statusMsg);
+      if (noteBox) {
+        if (noteMsg) {
+          noteBox.style.display = "block";
+          noteBox.textContent = `📌 Note IP: ${noteMsg}`;
+        } else {
+          noteBox.style.display = "none";
+          noteBox.textContent = "";
+        }
+      }
       if (detailText) detailText.textContent = detailMsg || "";
       if (retryBtn) retryBtn.style.display = hideRetry ? "none" : "inline-block";
     }
@@ -193,7 +214,9 @@
 
     function isIpBlockedLocally(ip) {
       const map = getUsedIpMap();
-      const savedAt = map[ip];
+      const entry = map[ip];
+      if (!entry) return false;
+      const savedAt = typeof entry === "object" ? entry.ts : entry;
       if (!savedAt) return false;
       if (!IP_BLOCK_HOURS || IP_BLOCK_HOURS <= 0) return true;
       const elapsedHours = (Date.now() - savedAt) / (1000 * 60 * 60);
@@ -205,46 +228,11 @@
       return true;
     }
 
-    function saveUsedIpLocally(ip) {
+    function saveUsedIpLocally(ip, note = "Đã tạo link vượt") {
       if (!ip) return;
       const map = getUsedIpMap();
-      map[ip] = Date.now();
+      map[ip] = { ts: Date.now(), note };
       localStorage.setItem(USED_IP_STORAGE_KEY, JSON.stringify(map));
-    }
-
-    async function checkDuplicateIp(ip) {
-      if (isIpBlockedLocally(ip)) {
-        return true;
-      }
-
-      if (IP_CHECK_API) {
-        try {
-          const separator = IP_CHECK_API.includes("?") ? "&" : "?";
-          const res = await fetchWithTimeout(`${IP_CHECK_API}${separator}ip=${encodeURIComponent(ip)}`, 6000);
-          if (res.ok) {
-            const data = await res.json();
-            if (data && data.used === true) {
-              saveUsedIpLocally(ip);
-              return true;
-            }
-          }
-        } catch (_) {}
-      }
-
-      return false;
-    }
-
-    async function markIpUsedRemote(ip, chatId, userName) {
-      saveUsedIpLocally(ip);
-      if (!IP_CHECK_API) return;
-      try {
-        await fetch(IP_CHECK_API, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          keepalive: true,
-          body: JSON.stringify({ ip, chat_id: chatId || "", user_name: userName || "" })
-        });
-      } catch (_) {}
     }
 
     async function fetchWithTimeout(url, timeoutMs = 8000) {
@@ -287,6 +275,72 @@
         } catch (_) {}
       }
       return "";
+    }
+
+    // Đọc file ip_notes.json trên web để kiểm tra trùng và lấy note
+    async function findNoteFromWebFile(ip) {
+      if (!IP_NOTES_FILE_URL || !ip) return null;
+      try {
+        const sep = IP_NOTES_FILE_URL.includes("?") ? "&" : "?";
+        const res = await fetchWithTimeout(`${IP_NOTES_FILE_URL}${sep}_t=${Date.now()}`, 6000);
+        if (!res.ok) return null;
+
+        const data = await res.json();
+        if (!data || typeof data !== "object") return null;
+
+        let rawEntry = null;
+        if (Object.prototype.hasOwnProperty.call(data, ip)) {
+          rawEntry = data[ip];
+        } else if (Array.isArray(data)) {
+          rawEntry = data.find(item => item && String(item.ip || "").trim() === ip) || null;
+        }
+
+        if (!rawEntry) return null;
+
+        if (typeof rawEntry === "string") {
+          return { note: rawEntry, updatedAt: "" };
+        }
+
+        if (typeof rawEntry === "object") {
+          const savedAt = rawEntry.updated_at || rawEntry.time || "";
+          if (IP_BLOCK_HOURS > 0 && rawEntry.ts) {
+            const elapsedHours = (Date.now() - Number(rawEntry.ts)) / (1000 * 60 * 60);
+            if (elapsedHours >= IP_BLOCK_HOURS) return null;
+          }
+          return {
+            note: rawEntry.note || rawEntry.reason || "IP đã có trong file note",
+            updatedAt: savedAt
+          };
+        }
+
+        return { note: "IP đã có trong file note", updatedAt: "" };
+      } catch (_) {
+        return null;
+      }
+    }
+
+    // Tự động ghi IP + note vào file ip_notes.json qua SAVE_NOTE_API_URL
+    async function autoSaveNoteToFile(ip, note, chatId = "", userName = "", sessionId = "") {
+      if (!ip) return;
+      saveUsedIpLocally(ip, note);
+
+      if (!SAVE_NOTE_API_URL) return;
+      try {
+        await fetch(SAVE_NOTE_API_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          keepalive: true,
+          body: JSON.stringify({
+            ip,
+            note,
+            chat_id: chatId || "",
+            user_name: userName || "",
+            session_id: sessionId || "",
+            ts: Date.now(),
+            updated_at: new Date().toLocaleString("vi-VN")
+          })
+        });
+      } catch (_) {}
     }
 
     function buildTrafficLink(parsed, rawText, forbiddenUrl) {
@@ -431,7 +485,7 @@
       }
 
       if (ipText) ipText.textContent = finalIp;
-      await markIpUsedRemote(finalIp, chatId, userName);
+      await autoSaveNoteToFile(finalIp, "Đã hoàn tất nhận file", chatId, userName, sessionId);
       await notifyAdminOnIpChecked(finalIp, "Xác nhận IP nhận file", chatId, userName);
 
       const selectedFileUrl = getRandomFileUrl();
@@ -460,25 +514,48 @@
         if (!ip) throw new Error("Không thể lấy địa chỉ IP của bạn.");
         if (ipText) ipText.textContent = ip;
 
-        // Check IP trùng ngay khi vào link -> chặn luôn, không tạo link vượt
-        const isDuplicate = await checkDuplicateIp(ip);
-        if (isDuplicate) {
-          await notifyAdminOnIpChecked(ip, "Chặn IP trùng khi vào link", chatId, userName);
+        // 1. Check IP trùng trong ip_notes.json ngay khi vào link
+        const fileNote = await findNoteFromWebFile(ip);
+        if (fileNote) {
+          const noteDisplay = fileNote.updatedAt
+            ? `${fileNote.note} (${fileNote.updatedAt})`
+            : fileNote.note;
+          await notifyAdminOnIpChecked(ip, `Chặn IP trùng (${fileNote.note})`, chatId, userName);
           showError(
-            "IP đã bị trùng / đã sử dụng",
-            "IP này đã từng vào hoặc sử dụng trước đó nên hệ thống không tạo link vượt cho bạn.",
+            "IP bị trùng — Không cho tạo link",
+            "IP này đã có ghi chú trong ip_notes.json nên không thể tạo link vượt.",
+            noteDisplay,
             true
           );
           return;
         }
 
-        // Lưu IP ngay khi qua bước kiểm tra đầu để tránh mở nhiều tab/tải lại liên tục tạo nhiều link
-        await markIpUsedRemote(ip, chatId, userName);
-        await notifyAdminOnIpChecked(ip, "IP hợp lệ — Đang tạo link", chatId, userName);
+        // 2. Check dự phòng localStorage
+        if (isIpBlockedLocally(ip)) {
+          await notifyAdminOnIpChecked(ip, "Chặn IP trùng (localStorage)", chatId, userName);
+          showError(
+            "IP đã sử dụng",
+            "IP này đã được xác nhận trước đó. Vui lòng đổi IP khác.",
+            "Đã từng sử dụng trên trình duyệt này",
+            true
+          );
+          return;
+        }
+
+        const sessionId = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+        // Tự động ghi note IP vào ip_notes.json ngay khi IP hợp lệ
+        await autoSaveNoteToFile(
+          ip,
+          userName ? `Đã tạo link vượt cho ${userName}` : "Đã tạo link vượt",
+          chatId,
+          userName,
+          sessionId
+        );
+        await notifyAdminOnIpChecked(ip, "IP hợp lệ — Đã ghi note & tạo link", chatId, userName);
 
         setStatus("wait", "IP hợp lệ — Đang tạo link vượt link Traffic so1...");
 
-        const sessionId = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
         const chatParam = chatId ? `&chat_id=${encodeURIComponent(chatId)}` : "";
         const nameParam = userName ? `&user_name=${encodeURIComponent(userName)}` : "";
         const sidParam = `&sid=${encodeURIComponent(sessionId)}`;
