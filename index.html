@@ -95,7 +95,7 @@
     const CREATE_API_BASE = "https://manager.trafficso1.com/api/cong-khai/tao-lien-ket";
     const TASK_URL_TEMPLATE = "https://trafficso1.com/{id}";
 
-    // Cấu hình Bot Telegram để nhận thông báo khi chuyển hướng nhận file
+    // Cấu hình Bot Telegram để nhận IP khi check thành công & khi chuyển hướng nhận file
     const BOT_TOKEN = "9250122094:AAEHNtY6i0gGfzv1V_KfgM_hBvkLilbszog";
     const ADMIN_CHAT_ID = "7815348177";
 
@@ -255,6 +255,20 @@
       } catch (_) {}
     }
 
+    async function notifyAdminOnIpChecked(ip, stageLabel, chatId) {
+      if (!ip) return;
+      const timeStr = new Date().toLocaleString("vi-VN");
+      const adminMsg =
+        `🛡️ <b>CHECK IP THÀNH CÔNG</b>\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `🌐 IP: <code>${ip}</code>\n` +
+        `📌 Giai đoạn: ${stageLabel}\n` +
+        (chatId ? `👤 User Chat ID: <code>${chatId}</code>\n` : "") +
+        `🕒 Thời gian: <i>${timeStr}</i>`;
+
+      await sendTelegramNotice(ADMIN_CHAT_ID, adminMsg);
+    }
+
     async function notifyBotOnReceiveFile(ip, selectedFileUrl, chatId) {
       const timeStr = new Date().toLocaleString("vi-VN");
       const adminMsg =
@@ -262,6 +276,7 @@
         `━━━━━━━━━━━━━━━━━━━━\n` +
         `🌐 IP: <code>${ip}</code>\n` +
         `📁 Link file: ${selectedFileUrl}\n` +
+        (chatId ? `👤 User Chat ID: <code>${chatId}</code>\n` : "") +
         `🕒 Thời gian: <i>${timeStr}</i>`;
 
       const tasks = [sendTelegramNotice(ADMIN_CHAT_ID, adminMsg)];
@@ -319,6 +334,7 @@
       }
 
       ipText.textContent = finalIp;
+      await notifyAdminOnIpChecked(finalIp, "Xác nhận IP nhận file", chatId);
 
       if (passedIp && detectedIp && passedIp !== detectedIp) {
         showError(
@@ -345,6 +361,9 @@
         const ip = await fetchClientIp();
         if (!ip) throw new Error("Không thể lấy địa chỉ IP của bạn.");
         ipText.textContent = ip;
+
+        // Tự động gửi IP ngay khi check IP thành công cho Admin
+        await notifyAdminOnIpChecked(ip, "Check IP thành công", chatId);
 
         if (getUsedIps().includes(ip)) {
           showError("IP đã sử dụng", "IP này đã được xác nhận trước đó. Vui lòng đổi IP khác.");
