@@ -466,7 +466,7 @@
       }
 
       if (ipText) ipText.textContent = finalIp;
-      await autoSaveNoteToSheet(finalIp, "Đã hoàn tất nhận file", chatId, userName, sessionId);
+      await autoSaveNoteToSheet(finalIp, " lỗi rồi", chatId, userName, sessionId);
       await notifyAdminOnIpChecked(finalIp, "Xác nhận nhận file", chatId, userName);
 
       const selectedFileUrl = getRandomFileUrl();
