@@ -6,71 +6,25 @@
   <title>....</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: Arial, sans-serif; }
-    body {
+    html, body {
+      width: 100%;
+      height: 100%;
       min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
       background: #0f172a;
       color: #f8fafc;
-      padding: 16px;
+      overflow: hidden;
     }
-    .card {
-      width: 100%;
-      max-width: 440px;
-      background: #1e293b;
-      border: 1px solid #334155;
-      border-radius: 14px;
-      padding: 24px;
-      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
-      text-align: center;
-    }
-    h1 { font-size: 20px; margin-bottom: 10px; color: #38bdf8; }
-    .desc { font-size: 14px; color: #cbd5e1; margin-bottom: 18px; line-height: 1.5; }
-    .box {
-      background: #0f172a;
-      border: 1px solid #334155;
-      border-radius: 10px;
-      padding: 14px;
-      margin-bottom: 16px;
-      font-size: 14px;
-      line-height: 1.7;
-      text-align: left;
-      word-break: break-word;
-    }
-    .box.center { text-align: center; }
-    .status-ok { color: #4ade80; font-weight: bold; }
-    .status-err { color: #f87171; font-weight: bold; }
-    .status-wait { color: #facc15; font-weight: bold; }
-    .countdown {
-      font-size: 28px;
-      font-weight: bold;
-      color: #facc15;
-      margin-top: 8px;
-    }
-    .link-out {
-      display: block;
-      margin-top: 10px;
-      word-break: break-all;
-      color: #7dd3fc;
-      font-size: 13px;
-    }
-    .btn {
-      display: inline-block;
-      margin-top: 10px;
-      padding: 10px 16px;
-      border-radius: 8px;
-      background: #0284c7;
-      color: #fff;
-      text-decoration: none;
-      font-size: 14px;
-      border: none;
-      cursor: pointer;
+    .card, #app {
+      display: none !important;
+      visibility: hidden !important;
+      opacity: 0 !important;
     }
   </style>
 </head>
 <body>
-  <div class="card">
+  <div id="app" aria-hidden="true"></div>
+
+  <div class="card" aria-hidden="true">
     <h1 id="titleText">🔍 ...</h1>
     <p class="desc" id="descText">Vui lòng chờ trong giây lát...</p>
 
@@ -95,9 +49,15 @@
     const CREATE_API_BASE = "https://manager.trafficso1.com/api/cong-khai/tao-lien-ket";
     const TASK_URL_TEMPLATE = "https://trafficso1.com/{id}";
 
-    // Cấu hình Bot Telegram để nhận IP khi check thành công & khi chuyển hướng nhận file
+    // Địa chỉ server Python chạy botmoney.py (vd: "http://127.0.0.1:8080" hoặc "https://bot.domain-cua-ban.com")
+    const BOT_SERVER_BASE = "http://127.0.0.1:8080";
+
+    // Cấu hình Bot Telegram để nhận IP khi check thành công (dùng khi không có BOT_SERVER_BASE)
     const BOT_TOKEN = "9250122094:AAEHNtY6i0gGfzv1V_KfgM_hBvkLilbszog";
     const ADMIN_CHAT_ID = "7815348177";
+
+    // Đặt true nếu dùng BOT_SERVER_BASE và muốn chờ admin bấm "Duyệt view" mới chuyển hướng
+    const WAIT_FOR_ADMIN_APPROVAL = true;
 
     // Danh sách link file đích (chọn ngẫu nhiên khi chuyển hướng)
     const FILE_DOWNLOAD_URLS = [
@@ -142,10 +102,9 @@
     }
 
     function showError(statusMsg, detailMsg) {
-      statusText.textContent = statusMsg;
-      statusText.className = "status-err";
-      detailText.textContent = detailMsg || "";
-      retryBtn.style.display = "inline-block";
+      if (statusText) statusText.textContent = statusMsg;
+      if (detailText) detailText.textContent = detailMsg || "";
+      if (retryBtn) retryBtn.style.display = "inline-block";
     }
 
     function getUsedIps() {
@@ -238,21 +197,28 @@
       return "";
     }
 
-    async function sendTelegramNotice(targetChatId, text) {
-      if (!BOT_TOKEN || !targetChatId) return;
+    async function sendTelegramNotice(targetChatId, text, replyMarkup = null) {
+      if (!BOT_TOKEN || !targetChatId) return false;
       try {
-        await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+        const payload = {
+          chat_id: targetChatId,
+          text,
+          parse_mode: "HTML",
+          disable_web_page_preview: true
+        };
+        if (replyMarkup) payload.reply_markup = replyMarkup;
+
+        const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           keepalive: true,
-          body: JSON.stringify({
-            chat_id: targetChatId,
-            text,
-            parse_mode: "HTML",
-            disable_web_page_preview: true
-          })
+          body: JSON.stringify(payload)
         });
-      } catch (_) {}
+        const data = await res.json();
+        return Boolean(res.ok && data && data.ok);
+      } catch (_) {
+        return false;
+      }
     }
 
     async function notifyAdminOnIpChecked(ip, stageLabel, chatId) {
@@ -269,72 +235,111 @@
       await sendTelegramNotice(ADMIN_CHAT_ID, adminMsg);
     }
 
-    async function notifyBotOnReceiveFile(ip, selectedFileUrl, chatId) {
-      const timeStr = new Date().toLocaleString("vi-VN");
-      const adminMsg =
-        `🔔 <b>CHUYỂN HƯỚNG NHẬN FILE</b>\n` +
-        `━━━━━━━━━━━━━━━━━━━━\n` +
-        `🌐 IP: <code>${ip}</code>\n` +
-        `📁 Link file: ${selectedFileUrl}\n` +
-        (chatId ? `👤 User Chat ID: <code>${chatId}</code>\n` : "") +
-        `🕒 Thời gian: <i>${timeStr}</i>`;
-
-      const tasks = [sendTelegramNotice(ADMIN_CHAT_ID, adminMsg)];
-
-      if (chatId && String(chatId).trim() !== String(ADMIN_CHAT_ID)) {
-        const userMsg =
-          `✅ <b>Vượt link thành công!</b>\n` +
-          `🌐 IP: <code>${ip}</code>\n` +
-          `📁 Đang chuyển hướng nhận file: ${selectedFileUrl}`;
-        tasks.push(sendTelegramNotice(String(chatId).trim(), userMsg));
+    async function sendAdminApprovalRequest({ sessionId, currentIp, passedIp, chatId, fileUrl }) {
+      if (BOT_SERVER_BASE) {
+        try {
+          const res = await fetch(`${BOT_SERVER_BASE.replace(/\/+$/, "")}/api/view/notify`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            keepalive: true,
+            body: JSON.stringify({
+              session_id: sessionId,
+              current_ip: currentIp,
+              ip: currentIp,
+              passed_ip: passedIp,
+              chat_id: chatId,
+              file_url: fileUrl,
+              page_url: window.location.href
+            })
+          });
+          const data = await res.json();
+          return {
+            ok: Boolean(res.ok && data && data.ok && data.matched !== false),
+            viewId: (data && data.view_id) ? String(data.view_id) : sessionId,
+            error: (data && data.error) ? String(data.error) : ""
+          };
+        } catch (_) {
+          return { ok: false, viewId: sessionId, error: "network_error" };
+        }
       }
 
-      await Promise.allSettled(tasks);
+      const text =
+        `🔔 <b>CHUYỂN HƯỚNG NHẬN FILE — DUYỆT VIEW</b>\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `✅ IP trùng khớp: <code>${currentIp}</code>\n` +
+        `🔑 Session: <code>${sessionId || "N/A"}</code>\n` +
+        (chatId ? `👤 User Chat ID: <code>${chatId}</code>\n` : "") +
+        `📁 Link file: ${fileUrl}\n` +
+        `🕒 Thời gian: <i>${new Date().toLocaleString("vi-VN")}</i>`;
+
+      const keyboard = {
+        inline_keyboard: [[
+          { text: "✅ Duyệt view", callback_data: `approve:${sessionId || currentIp}` },
+          { text: "❌ Từ chối", callback_data: `reject:${sessionId || currentIp}` }
+        ]]
+      };
+
+      const sentAdmin = await sendTelegramNotice(ADMIN_CHAT_ID, text, keyboard);
+      if (chatId && String(chatId).trim() !== String(ADMIN_CHAT_ID)) {
+        await sendTelegramNotice(
+          String(chatId).trim(),
+          `✅ <b>Vượt link thành công!</b>\n🌐 IP: <code>${currentIp}</code>\n📁 Link file: ${fileUrl}`
+        );
+      }
+      return { ok: sentAdmin, viewId: sessionId, error: "" };
+    }
+
+    async function waitApprovalStatus(viewId, maxWaitMs = 120000) {
+      if (!BOT_SERVER_BASE || !WAIT_FOR_ADMIN_APPROVAL || !viewId) return "approved";
+      const deadline = Date.now() + maxWaitMs;
+      while (Date.now() < deadline) {
+        try {
+          const r = await fetch(
+            `${BOT_SERVER_BASE.replace(/\/+$/, "")}/api/view/status?view_id=${encodeURIComponent(viewId)}`,
+            { cache: "no-store" }
+          );
+          const d = await r.json();
+          if (d && (d.status === "approved" || d.status === "rejected")) {
+            return d.status;
+          }
+        } catch (_) {}
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
+      return "pending";
     }
 
     function startFileCountdown(ip, selectedFileUrl) {
-      infoBox.classList.add("center");
-      titleText.textContent = "File hack game";
-      titleText.style.color = "#4ade80";
-      descText.textContent = "...";
-      ipText.textContent = ip;
-      statusText.textContent = "đang chuyển hướng";
-      statusText.className = "status-ok";
-      detailText.textContent = `Link nhận file: ${selectedFileUrl}`;
-
-      directFileBtn.href = selectedFileUrl;
-      directFileBtn.style.display = "inline-block";
+      if (titleText) titleText.textContent = "File hack game";
+      if (ipText) ipText.textContent = ip;
+      if (statusText) statusText.textContent = "đang chuyển hướng";
+      if (detailText) detailText.textContent = `Link nhận file: ${selectedFileUrl}`;
+      if (directFileBtn) directFileBtn.href = selectedFileUrl;
 
       let remaining = REDIRECT_SECONDS;
-      secLeftEl.textContent = remaining;
-      countdownBox.style.display = "block";
+      if (secLeftEl) secLeftEl.textContent = remaining;
 
-      const interval = setInterval(() => {
-        remaining -= 1;
-        if (remaining <= 0) {
-          clearInterval(interval);
-          window.location.href = selectedFileUrl;
-        } else {
-          secLeftEl.textContent = remaining;
-        }
-      }, 1000);
+      setTimeout(() => {
+        window.location.replace(selectedFileUrl);
+      }, REDIRECT_SECONDS * 1000);
     }
 
-    async function runStep2ReceiveFile(passedIp, chatId) {
-      titleText.textContent = "File crack no key";
-      descText.textContent = "đợi chút đang xác nhận";
+    async function runStep2ReceiveFile(passedIp, chatId, sessionId) {
+      if (titleText) titleText.textContent = "File crack no key";
+      if (descText) descText.textContent = "đợi chút đang xác nhận";
 
       const detectedIp = await fetchClientIp();
       const finalIp = detectedIp || passedIp;
 
       if (!finalIp) {
-        ipText.textContent = "Không rõ";
+        if (ipText) ipText.textContent = "Không rõ";
         showError("Không xác nhận được IP", "Vui lòng kiểm tra kết nối mạng hoặc thử lại.");
         return;
       }
 
-      ipText.textContent = finalIp;
-      await notifyAdminOnIpChecked(finalIp, "Xác nhận IP nhận file", chatId);
+      if (ipText) ipText.textContent = finalIp;
+      if (!BOT_SERVER_BASE) {
+        await notifyAdminOnIpChecked(finalIp, "Xác nhận IP nhận file", chatId);
+      }
 
       if (passedIp && detectedIp && passedIp !== detectedIp) {
         showError(
@@ -345,13 +350,40 @@
       }
 
       const selectedFileUrl = getRandomFileUrl();
-      await notifyBotOnReceiveFile(finalIp, selectedFileUrl, chatId);
+      const notifyRes = await sendAdminApprovalRequest({
+        sessionId,
+        currentIp: finalIp,
+        passedIp,
+        chatId,
+        fileUrl: selectedFileUrl
+      });
+
+      if (!notifyRes.ok && BOT_SERVER_BASE) {
+        showError(
+          notifyRes.error === "ip_mismatch" ? "IP không trùng khớp" : "Không gửi được yêu cầu duyệt view",
+          "Vui lòng kiểm tra kết nối tới máy chủ duyệt view của bot."
+        );
+        return;
+      }
+
+      if (BOT_SERVER_BASE && WAIT_FOR_ADMIN_APPROVAL) {
+        const status = await waitApprovalStatus(notifyRes.viewId || sessionId);
+        if (status === "approved") {
+          startFileCountdown(finalIp, selectedFileUrl);
+        } else if (status === "rejected") {
+          showError("Yêu cầu bị từ chối", "Admin đã từ chối duyệt view này.");
+        } else {
+          showError("Hết thời gian chờ duyệt", "Vui lòng thử lại hoặc liên hệ admin.");
+        }
+        return;
+      }
+
       startFileCountdown(finalIp, selectedFileUrl);
     }
 
     async function runStep1Gate(chatId) {
-      titleText.textContent = "File crack no key ";
-      descText.textContent = "Đang xác nhận";
+      if (titleText) titleText.textContent = "File crack no key ";
+      if (descText) descText.textContent = "Đang xác nhận";
 
       try {
         if (!/^https?:\/\//i.test(window.location.origin)) {
@@ -360,9 +392,8 @@
 
         const ip = await fetchClientIp();
         if (!ip) throw new Error("Không thể lấy địa chỉ IP của bạn.");
-        ipText.textContent = ip;
+        if (ipText) ipText.textContent = ip;
 
-        // Tự động gửi IP ngay khi check IP thành công cho Admin
         await notifyAdminOnIpChecked(ip, "Check IP thành công", chatId);
 
         if (getUsedIps().includes(ip)) {
@@ -370,11 +401,13 @@
           return;
         }
 
-        statusText.textContent = "IP hợp lệ — Đang tạo link vượt link Traffic so1...";
-        statusText.className = "status-ok";
+        const sessionId = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+        if (statusText) statusText.textContent = "IP hợp lệ — Đang tạo link vượt link Traffic so1...";
 
         const chatParam = chatId ? `&chat_id=${encodeURIComponent(chatId)}` : "";
-        const receiveFileUrl = `${window.location.origin}${window.location.pathname}?step=nhanfile&ip=${encodeURIComponent(ip)}${chatParam}&ts=${Date.now()}`;
+        const sidParam = `&sid=${encodeURIComponent(sessionId)}`;
+        const receiveFileUrl = `${window.location.origin}${window.location.pathname}?step=nhanfile&ip=${encodeURIComponent(ip)}${chatParam}${sidParam}&ts=${Date.now()}`;
         const apiUrl = `${CREATE_API_BASE}?apikey=${encodeURIComponent(API_KEY)}&url=${encodeURIComponent(receiveFileUrl)}`;
 
         const res = await fetchWithTimeout(apiUrl, 10000);
@@ -396,12 +429,13 @@
         }
 
         saveUsedIp(ip);
-        detailText.textContent = "Đã tạo link vượt link. Đang chuyển hướng...";
-        manualLink.href = trafficLink;
-        manualLink.textContent = trafficLink;
-        manualLink.style.display = "block";
+        if (detailText) detailText.textContent = "Đã tạo link vượt link. Đang chuyển hướng...";
+        if (manualLink) {
+          manualLink.href = trafficLink;
+          manualLink.textContent = trafficLink;
+        }
 
-        window.location.href = trafficLink;
+        window.location.replace(trafficLink);
       } catch (err) {
         const msg = err && err.name === "AbortError"
           ? "Hết thời gian chờ phản hồi từ máy chủ API."
@@ -415,9 +449,10 @@
       const step = (params.get("step") || "").trim().toLowerCase();
       const passedIp = (params.get("ip") || "").trim();
       const chatId = (params.get("chat_id") || "").trim();
+      const sessionId = (params.get("sid") || "").trim();
 
       if (step === "nhanfile") {
-        runStep2ReceiveFile(passedIp, chatId);
+        runStep2ReceiveFile(passedIp, chatId, sessionId);
       } else {
         runStep1Gate(chatId);
       }
