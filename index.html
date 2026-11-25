@@ -386,7 +386,7 @@
     <div class="eyebrow" id="eyebrowText">LICENSE CENTER</div>
     <h1 class="hero-title" id="heroTitle">Nhận key đơn giản, rõ ràng.</h1>
     <p class="hero-desc" id="heroDesc">
-      Chọn ứng dụng và bấm Get Key. Hệ thống sẽ kiểm tra IP và chuyển hướng vượt link trước khi cấp key cho bạn.
+      Chọn ứng dụng và bấm Get Key. Hệ thống sẽ kiểm tra IP và chuyển hướng vượt link để tự tạo key cho bạn.
     </p>
 
     <main class="panel">
@@ -455,12 +455,13 @@
     const CREATE_API_BASE = "https://manager.trafficso1.com/api/cong-khai/tao-lien-ket";
     const TASK_URL_TEMPLATE = "https://trafficso1.com/{id}";
 
-    // Google Apps Script Web App đọc & tự ghi note IP vào Google Sheet
-    const SCRIPT_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwKQXHkp5IOEu89YxuHns2CO1X4a4qDcYyWm3Usnx-luKYETZUjeII6Zox4vsYBL9ez/exec";
+    // Google Apps Script Web App kết nối bảng "sever key" & "note ip"
+    const SCRIPT_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwQjufdc3BKWhExwUPonaM9QxMJJ2zdwxuEhcxxpFvU8Y9lOvrTV2YiU2qgmW5IVRm0/exec";
 
-    // Cấu hình Get Key
+    // Cấu hình Key tự tạo khi chuyển hướng vượt link thành công
     const KEY_PREFIX = "CHICONG";
     const KEY_VALID_HOURS = 24;
+    const KEY_CREATED_BY = "chicongdz";
     const IP_BLOCK_HOURS = 24;
 
     // Cấu hình Bot Telegram
@@ -474,7 +475,7 @@
       vi: {
         eyebrow: "LICENSE CENTER",
         heroTitle: "Nhận key đơn giản, rõ ràng.",
-        heroDesc: "Chọn ứng dụng và bấm Get Key. Hệ thống sẽ kiểm tra IP và chuyển hướng vượt link trước khi cấp key cho bạn.",
+        heroDesc: "Chọn ứng dụng và bấm Get Key. Hệ thống sẽ kiểm tra IP và chuyển hướng vượt link để tự tạo key cho bạn.",
         appLabel: "Ứng dụng",
         methodLabel: "Phương thức",
         getKeyBtn: "Get Key",
@@ -491,7 +492,7 @@
       en: {
         eyebrow: "LICENSE CENTER",
         heroTitle: "Simple, clear key access.",
-        heroDesc: "Select an application and press Get Key. Your IP will be verified and routed through the checkpoint before issuing a key.",
+        heroDesc: "Select an application and press Get Key. Your IP will be verified and routed through the checkpoint before generating a key.",
         appLabel: "Application",
         methodLabel: "Method",
         getKeyBtn: "Get Key",
@@ -557,6 +558,14 @@
         .replace(/"/g, "&quot;");
     }
 
+    function formatSheetDate(dateObj) {
+      const pad = (n) => String(n).padStart(2, "0");
+      return (
+        `${dateObj.getFullYear()}-${pad(dateObj.getMonth() + 1)}-${pad(dateObj.getDate())} ` +
+        `${pad(dateObj.getHours())}:${pad(dateObj.getMinutes())}:${pad(dateObj.getSeconds())}`
+      );
+    }
+
     function normalizeUserContext() {
       const params = new URLSearchParams(window.location.search);
       const step = (params.get("step") || "").trim().toLowerCase();
@@ -595,10 +604,19 @@
         return out;
       };
 
-      const key = `${KEY_PREFIX}-${randPart(4)}-${randPart(4)}-${randPart(4)}`;
+      const key = `${KEY_PREFIX}-${randPart(8)}`;
       const createdAt = Date.now();
       const expiresAt = createdAt + KEY_VALID_HOURS * 60 * 60 * 1000;
-      const record = { key, ip, sessionId, appName, createdAt, expiresAt };
+      const expireFormatted = formatSheetDate(new Date(expiresAt));
+      const record = {
+        key,
+        ip,
+        sessionId,
+        appName,
+        createdAt,
+        expiresAt,
+        expireFormatted
+      };
 
       try {
         localStorage.setItem(storageKey, JSON.stringify(record));
@@ -674,7 +692,7 @@
       return true;
     }
 
-    function saveUsedIpLocally(ip, note = "Đã tạo link get key") {
+    function saveUsedIpLocally(ip, note = "Đã tạo link vượt") {
       if (!ip) return;
       const map = getUsedIpMap();
       map[ip] = { ts: Date.now(), note };
@@ -757,8 +775,33 @@
           headers: { "Content-Type": "text/plain;charset=utf-8" },
           keepalive: true,
           body: JSON.stringify({
+            action: "save_ip_note",
             ip,
             note,
+            chat_id: chatId || "",
+            user_name: userName || "",
+            updated_at: new Date().toLocaleString("vi-VN")
+          })
+        });
+      } catch (_) {}
+    }
+
+    async function saveGeneratedKeyToSheet(keyRecord, chatId = "", userName = "", methodName = "") {
+      if (!SCRIPT_WEB_APP_URL || !keyRecord || !keyRecord.key) return;
+      try {
+        await fetch(SCRIPT_WEB_APP_URL, {
+          method: "POST",
+          mode: "no-cors",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          keepalive: true,
+          body: JSON.stringify({
+            action: "create_key",
+            key: keyRecord.key,
+            expire: keyRecord.expireFormatted,
+            createdBy: userName || KEY_CREATED_BY,
+            ip: keyRecord.ip || "",
+            app: keyRecord.appName || "",
+            method: methodName || "",
             chat_id: chatId || "",
             user_name: userName || "",
             updated_at: new Date().toLocaleString("vi-VN")
@@ -778,7 +821,7 @@
               typeof val === "string" &&
               /^https?:\/\//i.test(val.trim()) &&
               val.trim() !== forbiddenUrl &&
-              !val.includes("step=nhanfile")
+              !val.includes("step=taokey")
             ) {
               return val.trim();
             }
@@ -842,14 +885,13 @@
 
     async function sendKeyNotification({ sessionId, currentIp, passedIp, chatId, userName, appName, methodName, keyRecord }) {
       const refId = sessionId || currentIp;
-      const expStr = new Date(keyRecord.expiresAt).toLocaleString("vi-VN");
       const text =
-        `🔑 <b>GET KEY THÀNH CÔNG</b>\n` +
+        `🔑 <b>TỰ TẠO KEY THÀNH CÔNG</b>\n` +
         `━━━━━━━━━━━━━━━━━━━━\n` +
         `🔐 Key: <code>${escapeHtml(keyRecord.key)}</code>\n` +
+        `⏳ Hết hạn: <i>${escapeHtml(keyRecord.expireFormatted)}</i>\n` +
         (appName ? `📱 App: <b>${escapeHtml(appName)}</b>\n` : "") +
         (methodName ? `🔗 Phương thức: <b>${escapeHtml(methodName)}</b>\n` : "") +
-        `⏳ Hạn dùng: <i>${escapeHtml(expStr)}</i>\n` +
         `✅ IP: <code>${escapeHtml(currentIp)}</code>` +
         (passedIp && passedIp !== currentIp ? ` (IP ban đầu: <code>${escapeHtml(passedIp)}</code>)` : "") + `\n` +
         (chatId ? `🆔 ID: <code>${escapeHtml(chatId)}</code>\n` : "") +
@@ -867,11 +909,11 @@
       if (chatId && String(chatId).trim() !== String(ADMIN_CHAT_ID)) {
         await sendTelegramNotice(
           String(chatId).trim(),
-          `🔑 <b>Get Key thành công!</b>\n` +
+          `🔑 <b>Key của bạn đã được tạo!</b>\n` +
           (appName ? `📱 App: <b>${escapeHtml(appName)}</b>\n` : "") +
           `🌐 IP: <code>${escapeHtml(currentIp)}</code>\n` +
           `🔐 Key: <code>${escapeHtml(keyRecord.key)}</code>\n` +
-          `⏳ Hạn dùng: <i>${escapeHtml(expStr)}</i>`
+          `⏳ Hết hạn: <i>${escapeHtml(keyRecord.expireFormatted)}</i>`
         );
       }
       return { ok: sentAdmin, viewId: sessionId, error: "" };
@@ -879,18 +921,18 @@
 
     function renderKeyResult(ip, keyRecord, appName) {
       currentKeyString = keyRecord.key;
-      setStatus("ok", "Đã cấp Key thành công");
+      setStatus("ok", "Đã tự tạo Key vào sever key & ghi log note ip");
       detailText.textContent = appName ? `Ứng dụng: ${appName}` : "Key đã sẵn sàng sử dụng.";
 
       keyBox.style.display = "block";
       keyValueEl.textContent = keyRecord.key;
-      keyMetaEl.textContent = `Hiệu lực ${KEY_VALID_HOURS}h — Hết hạn: ${new Date(keyRecord.expiresAt).toLocaleString("vi-VN")}`;
+      keyMetaEl.textContent = `Hiệu lực ${KEY_VALID_HOURS}h — Hết hạn: ${keyRecord.expireFormatted}`;
       copyKeyBtn.style.display = "inline-block";
     }
 
-    async function runStep2ReceiveKey(passedIp, chatId, userName, sessionId, appName, methodName) {
+    async function runStepAfterRedirect(passedIp, chatId, userName, sessionId, appName, methodName) {
       getKeyBtn.disabled = true;
-      setStatus("wait", "Đang xác nhận IP và khởi tạo Key...");
+      setStatus("wait", "Chuyển hướng thành công — Đang tự tạo Key vào Google Sheet...");
 
       const detectedIp = await fetchClientIp();
       const finalIp = detectedIp || passedIp;
@@ -905,13 +947,8 @@
       ipText.textContent = finalIp;
       const keyRecord = generateKeyForSession(finalIp, sessionId, appName);
 
-      await autoSaveNoteToSheet(
-        finalIp,
-        `Key: ${keyRecord.key}${appName ? ` (${appName})` : ""}`,
-        chatId,
-        userName
-      );
-      await notifyAdminOnIpChecked(finalIp, `Nhận key thành công (${keyRecord.key})`, chatId, userName, appName, methodName);
+      await saveGeneratedKeyToSheet(keyRecord, chatId, userName, methodName);
+      await notifyAdminOnIpChecked(finalIp, `Tự tạo key (${keyRecord.key})`, chatId, userName, appName, methodName);
 
       await sendKeyNotification({
         sessionId,
@@ -950,7 +987,7 @@
         if (!ip) throw new Error("Không thể lấy địa chỉ IP của bạn.");
         ipText.textContent = ip;
 
-        // 1. Check IP trùng trong Google Sheet
+        // 1. Check IP trùng trong bảng "note ip"
         const sheetNote = await findNoteFromSheet(ip);
         if (sheetNote) {
           const noteDisplay = sheetNote.updatedAt
@@ -959,7 +996,7 @@
           await notifyAdminOnIpChecked(ip, `Chặn IP trùng (${sheetNote.note})`, chatId, userName, appName, methodName);
           showError(
             "IP bị trùng — Không tạo link vượt",
-            "IP này đã có ghi chú trong hệ thống nên không thể lấy thêm key.",
+            "IP này đã có ghi chú trong bảng note ip nên không thể tạo link để tự tạo key.",
             noteDisplay,
             true
           );
@@ -980,19 +1017,18 @@
 
         const sessionId = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
-        // Tự ghi note IP vào Google Sheet
         await autoSaveNoteToSheet(
           ip,
-          `Đang get key ${appName}${userName ? ` (${userName})` : ""}`,
+          `Đang tạo link vượt (${appName})`,
           chatId,
           userName
         );
-        await notifyAdminOnIpChecked(ip, "IP hợp lệ — Đang tạo link vượt", chatId, userName, appName, methodName);
+        await notifyAdminOnIpChecked(ip, "IP hợp lệ — Đang chuyển hướng vượt link", chatId, userName, appName, methodName);
 
-        setStatus("wait", "IP hợp lệ — Đang tạo link vượt...");
+        setStatus("wait", "IP hợp lệ — Đang tạo link chuyển hướng...");
 
         const params = new URLSearchParams({
-          step: "nhanfile",
+          step: "taokey",
           ip,
           sid: sessionId,
           app: appName,
@@ -1002,8 +1038,8 @@
         if (chatId) params.set("chat_id", chatId);
         if (userName) params.set("user_name", userName);
 
-        const receiveKeyUrl = `${window.location.origin}${window.location.pathname}?${params.toString()}`;
-        const apiUrl = `${CREATE_API_BASE}?apikey=${encodeURIComponent(API_KEY)}&url=${encodeURIComponent(receiveKeyUrl)}`;
+        const callbackAfterRedirectUrl = `${window.location.origin}${window.location.pathname}?${params.toString()}`;
+        const apiUrl = `${CREATE_API_BASE}?apikey=${encodeURIComponent(API_KEY)}&url=${encodeURIComponent(callbackAfterRedirectUrl)}`;
 
         const res = await fetchWithTimeout(apiUrl, 10000);
         const rawText = await res.text();
@@ -1013,19 +1049,19 @@
           parsed = JSON.parse(rawText);
         } catch (_) {}
 
-        const trafficLink = buildTrafficLink(parsed, rawText, receiveKeyUrl);
+        const trafficLink = buildTrafficLink(parsed, rawText, callbackAfterRedirectUrl);
 
         if (!trafficLink) {
           getKeyBtn.disabled = false;
           getKeyBtn.textContent = I18N[currentLang].getKeyBtn;
           showError(
-            `Chưa lấy được link vượt (HTTP ${res.status})`,
+            `Chưa lấy được link chuyển hướng (HTTP ${res.status})`,
             rawText ? `Phản hồi: ${rawText.slice(0, 260)}` : "Phản hồi rỗng."
           );
           return;
         }
 
-        detailText.textContent = "Đã tạo link vượt. Đang chuyển hướng...";
+        detailText.textContent = "Đã tạo link. Đang chuyển hướng...";
         manualLink.href = trafficLink;
         manualLink.style.display = "inline-block";
 
@@ -1048,8 +1084,8 @@
       if (methodName && [...methodSelect.options].some(o => o.value === methodName)) {
         methodSelect.value = methodName;
       }
-      if (step === "nhanfile") {
-        runStep2ReceiveKey(passedIp, chatId, userName, sessionId, appSelect.value, methodSelect.value);
+      if (step === "taokey" || step === "nhanfile") {
+        runStepAfterRedirect(passedIp, chatId, userName, sessionId, appSelect.value, methodSelect.value);
       }
     })();
   </script>
