@@ -84,14 +84,13 @@
     const CREATE_API_BASE = "https://manager.trafficso1.com/api/cong-khai/tao-lien-ket";
     const TASK_URL_TEMPLATE = "https://trafficso1.com/{id}";
 
-    // Gửi thẳng thông báo qua Telegram Bot API (không phụ thuộc máy chủ duyệt view riêng)
+    // Gửi thông báo trực tiếp qua Telegram Bot API
     const BOT_SERVER_BASE = "";
 
-    // Cấu hình Bot Telegram để nhận IP khi check thành công & báo khi chuyển hướng nhận file
+    // Cấu hình Bot Telegram
     const BOT_TOKEN = "9250122094:AAEHNtY6i0gGfzv1V_KfgM_hBvkLilbszog";
     const ADMIN_CHAT_ID = "7815348177";
 
-    // Tắt chờ duyệt qua backend riêng để chuyển hướng trực tiếp sau khi báo Telegram
     const WAIT_FOR_ADMIN_APPROVAL = false;
 
     // Danh sách link file đích (chọn ngẫu nhiên khi chuyển hướng)
@@ -271,8 +270,9 @@
     }
 
     async function sendAdminApprovalRequest({ sessionId, currentIp, passedIp, chatId, fileUrl }) {
+      const refId = sessionId || currentIp;
       const text =
-        `🔔 <b>có view mới cần check chicong ơiiiiii</b>\n` +
+        `🔔 <b>CHUYỂN HƯỚNG NHẬN FILE — DUYỆT VIEW</b>\n` +
         `━━━━━━━━━━━━━━━━━━━━\n` +
         `✅ IP: <code>${currentIp}</code>` +
         (passedIp && passedIp !== currentIp ? ` (IP ban đầu: <code>${passedIp}</code>)` : "") + `\n` +
@@ -283,8 +283,8 @@
 
       const keyboard = {
         inline_keyboard: [[
-          { text: "✅ Duyệt view", callback_data: `approve:${sessionId || currentIp}` },
-          { text: "❌ Từ chối view", callback_data: `reject:${sessionId || currentIp}` }
+          { text: "✅ Duyệt view", callback_data: `approve:${refId}` },
+          { text: "❌ Từ chối", callback_data: `reject:${refId}` }
         ]]
       };
 
