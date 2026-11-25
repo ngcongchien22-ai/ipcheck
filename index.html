@@ -84,15 +84,15 @@
     const CREATE_API_BASE = "https://manager.trafficso1.com/api/cong-khai/tao-lien-ket";
     const TASK_URL_TEMPLATE = "https://trafficso1.com/{id}";
 
-    // Địa chỉ server Python chạy botmoney.py (vd: "http://127.0.0.1:8080" hoặc "https://bot.domain-cua-ban.com")
-    const BOT_SERVER_BASE = "http://127.0.0.1:8080";
+    // Gửi thẳng thông báo qua Telegram Bot API (không phụ thuộc máy chủ duyệt view riêng)
+    const BOT_SERVER_BASE = "";
 
-    // Cấu hình Bot Telegram để nhận IP khi check thành công (dùng khi không có BOT_SERVER_BASE)
+    // Cấu hình Bot Telegram để nhận IP khi check thành công & báo khi chuyển hướng nhận file
     const BOT_TOKEN = "9250122094:AAEHNtY6i0gGfzv1V_KfgM_hBvkLilbszog";
     const ADMIN_CHAT_ID = "7815348177";
 
-    // Đặt true nếu dùng BOT_SERVER_BASE và muốn chờ admin bấm "Duyệt view" mới chuyển hướng
-    const WAIT_FOR_ADMIN_APPROVAL = true;
+    // Tắt chờ duyệt qua backend riêng để chuyển hướng trực tiếp sau khi báo Telegram
+    const WAIT_FOR_ADMIN_APPROVAL = false;
 
     // Danh sách link file đích (chọn ngẫu nhiên khi chuyển hướng)
     const FILE_DOWNLOAD_URLS = [
@@ -271,50 +271,17 @@
     }
 
     async function sendAdminApprovalRequest({ sessionId, currentIp, passedIp, chatId, fileUrl }) {
-      if (BOT_SERVER_BASE) {
-        try {
-          const res = await fetch(`${BOT_SERVER_BASE.replace(/\/+$/, "")}/api/view/notify`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            keepalive: true,
-            body: JSON.stringify({
-              session_id: sessionId,
-              current_ip: currentIp,
-              ip: currentIp,
-              passed_ip: passedIp,
-              chat_id: chatId,
-              file_url: fileUrl,
-              page_url: window.location.href
-            })
-          });
-          const data = await res.json();
-          return {
-            ok: Boolean(res.ok && data && data.ok && data.matched !== false),
-            viewId: (data && data.view_id) ? String(data.view_id) : sessionId,
-            error: (data && data.error) ? String(data.error) : ""
-          };
-        } catch (_) {
-          return { ok: false, viewId: sessionId, error: "network_error" };
-        }
-      }
-
       const text =
-        `🔔 <b>CHUYỂN HƯỚNG NHẬN FILE — DUYỆT VIEW</b>\n` +
+        `🔔 <b>CHUYỂN HƯỚNG NHẬN FILE</b>\n` +
         `━━━━━━━━━━━━━━━━━━━━\n` +
-        `✅ IP trùng khớp: <code>${currentIp}</code>\n` +
+        `✅ IP: <code>${currentIp}</code>` +
+        (passedIp && passedIp !== currentIp ? ` (IP ban đầu: <code>${passedIp}</code>)` : "") + `\n` +
         `🔑 Session: <code>${sessionId || "N/A"}</code>\n` +
         (chatId ? `👤 User Chat ID: <code>${chatId}</code>\n` : "") +
         `📁 Link file: ${fileUrl}\n` +
         `🕒 Thời gian: <i>${new Date().toLocaleString("vi-VN")}</i>`;
 
-      const keyboard = {
-        inline_keyboard: [[
-          { text: "✅ Duyệt view", callback_data: `approve:${sessionId || currentIp}` },
-          { text: "❌ Từ chối", callback_data: `reject:${sessionId || currentIp}` }
-        ]]
-      };
-
-      const sentAdmin = await sendTelegramNotice(ADMIN_CHAT_ID, text, keyboard);
+      const sentAdmin = await sendTelegramNotice(ADMIN_CHAT_ID, text);
       if (chatId && String(chatId).trim() !== String(ADMIN_CHAT_ID)) {
         await sendTelegramNotice(
           String(chatId).trim(),
@@ -322,25 +289,6 @@
         );
       }
       return { ok: sentAdmin, viewId: sessionId, error: "" };
-    }
-
-    async function waitApprovalStatus(viewId, maxWaitMs = 120000) {
-      if (!BOT_SERVER_BASE || !WAIT_FOR_ADMIN_APPROVAL || !viewId) return "approved";
-      const deadline = Date.now() + maxWaitMs;
-      while (Date.now() < deadline) {
-        try {
-          const r = await fetch(
-            `${BOT_SERVER_BASE.replace(/\/+$/, "")}/api/view/status?view_id=${encodeURIComponent(viewId)}`,
-            { cache: "no-store" }
-          );
-          const d = await r.json();
-          if (d && (d.status === "approved" || d.status === "rejected")) {
-            return d.status;
-          }
-        } catch (_) {}
-        await new Promise((resolve) => setTimeout(resolve, 2000));
-      }
-      return "pending";
     }
 
     function startFileCountdown(ip, selectedFileUrl) {
@@ -376,47 +324,16 @@
       }
 
       if (ipText) ipText.textContent = finalIp;
-      if (!BOT_SERVER_BASE) {
-        await notifyAdminOnIpChecked(finalIp, "Xác nhận IP nhận file", chatId);
-      }
-
-      if (passedIp && detectedIp && passedIp !== detectedIp) {
-        showError(
-          "IP không khớp phiên ban đầu",
-          `IP lúc tạo link: ${passedIp} | IP hiện tại: ${detectedIp}`
-        );
-        return;
-      }
+      await notifyAdminOnIpChecked(finalIp, "Xác nhận IP nhận file", chatId);
 
       const selectedFileUrl = getRandomFileUrl();
-      const notifyRes = await sendAdminApprovalRequest({
+      await sendAdminApprovalRequest({
         sessionId,
         currentIp: finalIp,
         passedIp,
         chatId,
         fileUrl: selectedFileUrl
       });
-
-      if (!notifyRes.ok && BOT_SERVER_BASE) {
-        showError(
-          notifyRes.error === "ip_mismatch" ? "IP không trùng khớp" : "Không gửi được yêu cầu duyệt view",
-          "Vui lòng kiểm tra kết nối tới máy chủ duyệt view của bot."
-        );
-        return;
-      }
-
-      if (BOT_SERVER_BASE && WAIT_FOR_ADMIN_APPROVAL) {
-        if (statusText) statusText.textContent = "Đang chờ Admin duyệt view...";
-        const status = await waitApprovalStatus(notifyRes.viewId || sessionId);
-        if (status === "approved") {
-          startFileCountdown(finalIp, selectedFileUrl);
-        } else if (status === "rejected") {
-          showError("Yêu cầu bị từ chối", "Admin đã từ chối duyệt view này.");
-        } else {
-          showError("Hết thời gian chờ duyệt", "Vui lòng thử lại hoặc liên hệ admin.");
-        }
-        return;
-      }
 
       startFileCountdown(finalIp, selectedFileUrl);
     }
