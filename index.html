@@ -34,6 +34,9 @@
       font-size: 14px;
       line-height: 1.5;
     }
+    .status-wait { color: #facc15; font-weight: bold; }
+    .status-err { color: #f87171; font-weight: bold; }
+    .status-ok { color: #4ade80; font-weight: bold; }
     .card .countdown { margin-top: 8px; color: #38bdf8; font-weight: bold; }
     .card .link-out {
       display: inline-block;
@@ -84,14 +87,16 @@
     const CREATE_API_BASE = "https://manager.trafficso1.com/api/cong-khai/tao-lien-ket";
     const TASK_URL_TEMPLATE = "https://trafficso1.com/{id}";
 
-    // Gửi thông báo trực tiếp qua Telegram Bot API
-    const BOT_SERVER_BASE = "";
+    // Tùy chọn kiểm tra IP trùng qua server/API (để trống "" nếu chỉ dùng localStorage)
+    // Nếu có API: GET `${IP_CHECK_API}?ip=...` trả về { "used": true/false } và POST lưu IP
+    const IP_CHECK_API = "";
+
+    // Thời gian hết hạn chặn IP trùng tính bằng giờ (0 = chặn vĩnh viễn trên localStorage)
+    const IP_BLOCK_HOURS = 24;
 
     // Cấu hình Bot Telegram
     const BOT_TOKEN = "9250122094:AAEHNtY6i0gGfzv1V_KfgM_hBvkLilbszog";
     const ADMIN_CHAT_ID = "7815348177";
-
-    const WAIT_FOR_ADMIN_APPROVAL = false;
 
     // Danh sách link file đích (chọn ngẫu nhiên khi chuyển hướng)
     const FILE_DOWNLOAD_URLS = [
@@ -116,11 +121,10 @@
     ];
 
     const REDIRECT_SECONDS = 3;
-    const USED_IP_STORAGE_KEY = "trafficso1_used_ips_v1";
+    const USED_IP_STORAGE_KEY = "trafficso1_used_ips_v2";
 
     const titleText = document.getElementById("titleText");
     const descText = document.getElementById("descText");
-    const infoBox = document.getElementById("infoBox");
     const ipText = document.getElementById("ipText");
     const statusText = document.getElementById("statusText");
     const detailText = document.getElementById("detailText");
@@ -161,26 +165,86 @@
       return FILE_DOWNLOAD_URLS[idx];
     }
 
-    function showError(statusMsg, detailMsg) {
-      if (statusText) statusText.textContent = statusMsg;
+    function setStatus(type, msg) {
+      if (!statusText) return;
+      statusText.className = type === "err" ? "status-err" : type === "ok" ? "status-ok" : "status-wait";
+      statusText.textContent = msg;
+    }
+
+    function showError(statusMsg, detailMsg, hideRetry = false) {
+      setStatus("err", statusMsg);
       if (detailText) detailText.textContent = detailMsg || "";
-      if (retryBtn) retryBtn.style.display = "inline-block";
+      if (retryBtn) retryBtn.style.display = hideRetry ? "none" : "inline-block";
     }
 
-    function getUsedIps() {
+    function getUsedIpMap() {
       try {
-        return JSON.parse(localStorage.getItem(USED_IP_STORAGE_KEY) || "[]");
+        const raw = JSON.parse(localStorage.getItem(USED_IP_STORAGE_KEY) || "{}");
+        if (Array.isArray(raw)) {
+          const map = {};
+          raw.forEach(ip => { map[ip] = Date.now(); });
+          return map;
+        }
+        return raw && typeof raw === "object" ? raw : {};
       } catch (_) {
-        return [];
+        return {};
       }
     }
 
-    function saveUsedIp(ip) {
-      const list = getUsedIps();
-      if (!list.includes(ip)) {
-        list.push(ip);
-        localStorage.setItem(USED_IP_STORAGE_KEY, JSON.stringify(list));
+    function isIpBlockedLocally(ip) {
+      const map = getUsedIpMap();
+      const savedAt = map[ip];
+      if (!savedAt) return false;
+      if (!IP_BLOCK_HOURS || IP_BLOCK_HOURS <= 0) return true;
+      const elapsedHours = (Date.now() - savedAt) / (1000 * 60 * 60);
+      if (elapsedHours >= IP_BLOCK_HOURS) {
+        delete map[ip];
+        localStorage.setItem(USED_IP_STORAGE_KEY, JSON.stringify(map));
+        return false;
       }
+      return true;
+    }
+
+    function saveUsedIpLocally(ip) {
+      if (!ip) return;
+      const map = getUsedIpMap();
+      map[ip] = Date.now();
+      localStorage.setItem(USED_IP_STORAGE_KEY, JSON.stringify(map));
+    }
+
+    async function checkDuplicateIp(ip) {
+      if (isIpBlockedLocally(ip)) {
+        return true;
+      }
+
+      if (IP_CHECK_API) {
+        try {
+          const separator = IP_CHECK_API.includes("?") ? "&" : "?";
+          const res = await fetchWithTimeout(`${IP_CHECK_API}${separator}ip=${encodeURIComponent(ip)}`, 6000);
+          if (res.ok) {
+            const data = await res.json();
+            if (data && data.used === true) {
+              saveUsedIpLocally(ip);
+              return true;
+            }
+          }
+        } catch (_) {}
+      }
+
+      return false;
+    }
+
+    async function markIpUsedRemote(ip, chatId, userName) {
+      saveUsedIpLocally(ip);
+      if (!IP_CHECK_API) return;
+      try {
+        await fetch(IP_CHECK_API, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          keepalive: true,
+          body: JSON.stringify({ ip, chat_id: chatId || "", user_name: userName || "" })
+        });
+      } catch (_) {}
     }
 
     async function fetchWithTimeout(url, timeoutMs = 8000) {
@@ -285,10 +349,10 @@
       if (!ip) return;
       const timeStr = new Date().toLocaleString("vi-VN");
       const adminMsg =
-        `🛡️ <b>CHECK IP THÀNH CÔNG</b>\n` +
+        `🛡️ <b>CHECK IP</b>\n` +
         `━━━━━━━━━━━━━━━━━━━━\n` +
         `🌐 IP: <code>${escapeHtml(ip)}</code>\n` +
-        `📌 Giai đoạn: ${escapeHtml(stageLabel)}\n` +
+        `📌 Trạng thái: ${escapeHtml(stageLabel)}\n` +
         (chatId ? `🆔 ID người dùng: <code>${escapeHtml(chatId)}</code>\n` : "") +
         (userName ? `👤 Tên người dùng: <b>${escapeHtml(userName)}</b>\n` : "") +
         `🕒 Thời gian: <i>${escapeHtml(timeStr)}</i>`;
@@ -332,7 +396,7 @@
     function startFileCountdown(ip, selectedFileUrl) {
       if (titleText) titleText.textContent = "File hack game";
       if (ipText) ipText.textContent = ip;
-      if (statusText) statusText.textContent = "đang chuyển hướng";
+      setStatus("ok", "đang chuyển hướng");
       if (detailText) detailText.textContent = `Link nhận file: ${selectedFileUrl}`;
       if (directFileBtn) {
         directFileBtn.href = selectedFileUrl;
@@ -367,6 +431,7 @@
       }
 
       if (ipText) ipText.textContent = finalIp;
+      await markIpUsedRemote(finalIp, chatId, userName);
       await notifyAdminOnIpChecked(finalIp, "Xác nhận IP nhận file", chatId, userName);
 
       const selectedFileUrl = getRandomFileUrl();
@@ -383,8 +448,8 @@
     }
 
     async function runStep1Gate(chatId, userName) {
-      if (titleText) titleText.textContent = "File crack no key ";
-      if (descText) descText.textContent = "Đang xác nhận";
+      if (titleText) titleText.textContent = "File crack no key";
+      if (descText) descText.textContent = "Đang kiểm tra IP trước khi tạo link...";
 
       try {
         if (!/^https?:\/\//i.test(window.location.origin)) {
@@ -395,17 +460,25 @@
         if (!ip) throw new Error("Không thể lấy địa chỉ IP của bạn.");
         if (ipText) ipText.textContent = ip;
 
-        await notifyAdminOnIpChecked(ip, "Check IP thành công", chatId, userName);
-
-        if (getUsedIps().includes(ip)) {
-          showError("IP đã sử dụng", "IP này đã được xác nhận trước đó. Vui lòng đổi IP khác.");
+        // Check IP trùng ngay khi vào link -> chặn luôn, không tạo link vượt
+        const isDuplicate = await checkDuplicateIp(ip);
+        if (isDuplicate) {
+          await notifyAdminOnIpChecked(ip, "Chặn IP trùng khi vào link", chatId, userName);
+          showError(
+            "IP đã bị trùng / đã sử dụng",
+            "IP này đã từng vào hoặc sử dụng trước đó nên hệ thống không tạo link vượt cho bạn.",
+            true
+          );
           return;
         }
 
+        // Lưu IP ngay khi qua bước kiểm tra đầu để tránh mở nhiều tab/tải lại liên tục tạo nhiều link
+        await markIpUsedRemote(ip, chatId, userName);
+        await notifyAdminOnIpChecked(ip, "IP hợp lệ — Đang tạo link", chatId, userName);
+
+        setStatus("wait", "IP hợp lệ — Đang tạo link vượt link Traffic so1...");
+
         const sessionId = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-
-        if (statusText) statusText.textContent = "IP hợp lệ — Đang tạo link vượt link Traffic so1...";
-
         const chatParam = chatId ? `&chat_id=${encodeURIComponent(chatId)}` : "";
         const nameParam = userName ? `&user_name=${encodeURIComponent(userName)}` : "";
         const sidParam = `&sid=${encodeURIComponent(sessionId)}`;
@@ -430,7 +503,6 @@
           return;
         }
 
-        saveUsedIp(ip);
         if (detailText) detailText.textContent = "Đã tạo link vượt link. Đang chuyển hướng...";
         if (manualLink) {
           manualLink.href = trafficLink;
