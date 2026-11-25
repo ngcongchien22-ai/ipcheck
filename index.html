@@ -130,6 +130,32 @@
     const directFileBtn = document.getElementById("directFileBtn");
     const retryBtn = document.getElementById("retryBtn");
 
+    function escapeHtml(str) {
+      return String(str || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function normalizeUserContext() {
+      const params = new URLSearchParams(window.location.search);
+      const step = (params.get("step") || "").trim().toLowerCase();
+      const passedIp = (params.get("ip") || "").trim();
+      const rawChatId = (params.get("chat_id") || params.get("user_id") || params.get("id") || "").trim();
+      const chatId = /^\d+$/.test(rawChatId) ? rawChatId : "";
+      const userName = (params.get("user_name") || params.get("name") || "").trim();
+      const sessionId = (params.get("sid") || "").trim();
+      return { step, passedIp, chatId, userName, sessionId };
+    }
+
+    function buildSafeCallbackData(prefix, chatId, refId) {
+      const cid = String(chatId || "").trim();
+      const sid = String(refId || "").trim().slice(0, 32);
+      const combined = cid ? `${prefix}:${cid}|${sid}` : `${prefix}:${sid}`;
+      return combined.length <= 64 ? combined : `${prefix}:${sid}`.slice(0, 64);
+    }
+
     function getRandomFileUrl() {
       const idx = Math.floor(Math.random() * FILE_DOWNLOAD_URLS.length);
       return FILE_DOWNLOAD_URLS[idx];
@@ -255,36 +281,38 @@
       }
     }
 
-    async function notifyAdminOnIpChecked(ip, stageLabel, chatId) {
+    async function notifyAdminOnIpChecked(ip, stageLabel, chatId, userName) {
       if (!ip) return;
       const timeStr = new Date().toLocaleString("vi-VN");
       const adminMsg =
         `🛡️ <b>CHECK IP THÀNH CÔNG</b>\n` +
         `━━━━━━━━━━━━━━━━━━━━\n` +
-        `🌐 IP: <code>${ip}</code>\n` +
-        `📌 Giai đoạn: ${stageLabel}\n` +
-        (chatId ? `👤 User Chat ID: <code>${chatId}</code>\n` : "") +
-        `🕒 Thời gian: <i>${timeStr}</i>`;
+        `🌐 IP: <code>${escapeHtml(ip)}</code>\n` +
+        `📌 Giai đoạn: ${escapeHtml(stageLabel)}\n` +
+        (chatId ? `🆔 ID người dùng: <code>${escapeHtml(chatId)}</code>\n` : "") +
+        (userName ? `👤 Tên người dùng: <b>${escapeHtml(userName)}</b>\n` : "") +
+        `🕒 Thời gian: <i>${escapeHtml(timeStr)}</i>`;
 
       await sendTelegramNotice(ADMIN_CHAT_ID, adminMsg);
     }
 
-    async function sendAdminApprovalRequest({ sessionId, currentIp, passedIp, chatId, fileUrl }) {
+    async function sendAdminApprovalRequest({ sessionId, currentIp, passedIp, chatId, userName, fileUrl }) {
       const refId = sessionId || currentIp;
       const text =
         `🔔 <b>CHUYỂN HƯỚNG NHẬN FILE — DUYỆT VIEW</b>\n` +
         `━━━━━━━━━━━━━━━━━━━━\n` +
-        `✅ IP: <code>${currentIp}</code>` +
-        (passedIp && passedIp !== currentIp ? ` (IP ban đầu: <code>${passedIp}</code>)` : "") + `\n` +
-        `🔑 Session: <code>${sessionId || "N/A"}</code>\n` +
-        (chatId ? `👤 User Chat ID: <code>${chatId}</code>\n` : "") +
-        `📁 Link file: ${fileUrl}\n` +
-        `🕒 Thời gian: <i>${new Date().toLocaleString("vi-VN")}</i>`;
+        `✅ IP: <code>${escapeHtml(currentIp)}</code>` +
+        (passedIp && passedIp !== currentIp ? ` (IP ban đầu: <code>${escapeHtml(passedIp)}</code>)` : "") + `\n` +
+        (chatId ? `🆔 ID người dùng: <code>${escapeHtml(chatId)}</code>\n` : "") +
+        (userName ? `👤 Tên người dùng: <b>${escapeHtml(userName)}</b>\n` : "") +
+        `🔑 Session: <code>${escapeHtml(sessionId || "N/A")}</code>\n` +
+        `📁 Link file: ${escapeHtml(fileUrl)}\n` +
+        `🕒 Thời gian: <i>${escapeHtml(new Date().toLocaleString("vi-VN"))}</i>`;
 
       const keyboard = {
         inline_keyboard: [[
-          { text: "✅ Duyệt view", callback_data: `approve:${refId}` },
-          { text: "❌ Từ chối", callback_data: `reject:${refId}` }
+          { text: "✅ Duyệt view", callback_data: buildSafeCallbackData("approve", chatId, refId) },
+          { text: "❌ Từ chối", callback_data: buildSafeCallbackData("reject", chatId, refId) }
         ]]
       };
 
@@ -292,7 +320,10 @@
       if (chatId && String(chatId).trim() !== String(ADMIN_CHAT_ID)) {
         await sendTelegramNotice(
           String(chatId).trim(),
-          `✅ <b>Vượt link thành công!</b>\n🌐 IP: <code>${currentIp}</code>\n📁 Link file: ${fileUrl}`
+          `✅ <b>Vượt link thành công!</b>\n` +
+          (userName ? `👤 Tên người dùng: <b>${escapeHtml(userName)}</b>\n` : "") +
+          `🌐 IP: <code>${escapeHtml(currentIp)}</code>\n` +
+          `📁 Link file: ${escapeHtml(fileUrl)}`
         );
       }
       return { ok: sentAdmin, viewId: sessionId, error: "" };
@@ -312,12 +343,17 @@
       let remaining = REDIRECT_SECONDS;
       if (secLeftEl) secLeftEl.textContent = remaining;
 
-      setTimeout(() => {
-        window.location.replace(selectedFileUrl);
-      }, REDIRECT_SECONDS * 1000);
+      const timer = setInterval(() => {
+        remaining -= 1;
+        if (secLeftEl) secLeftEl.textContent = Math.max(0, remaining);
+        if (remaining <= 0) {
+          clearInterval(timer);
+          window.location.replace(selectedFileUrl);
+        }
+      }, 1000);
     }
 
-    async function runStep2ReceiveFile(passedIp, chatId, sessionId) {
+    async function runStep2ReceiveFile(passedIp, chatId, userName, sessionId) {
       if (titleText) titleText.textContent = "File crack no key";
       if (descText) descText.textContent = "đợi chút đang xác nhận";
 
@@ -331,7 +367,7 @@
       }
 
       if (ipText) ipText.textContent = finalIp;
-      await notifyAdminOnIpChecked(finalIp, "Xác nhận IP nhận file", chatId);
+      await notifyAdminOnIpChecked(finalIp, "Xác nhận IP nhận file", chatId, userName);
 
       const selectedFileUrl = getRandomFileUrl();
       await sendAdminApprovalRequest({
@@ -339,13 +375,14 @@
         currentIp: finalIp,
         passedIp,
         chatId,
+        userName,
         fileUrl: selectedFileUrl
       });
 
       startFileCountdown(finalIp, selectedFileUrl);
     }
 
-    async function runStep1Gate(chatId) {
+    async function runStep1Gate(chatId, userName) {
       if (titleText) titleText.textContent = "File crack no key ";
       if (descText) descText.textContent = "Đang xác nhận";
 
@@ -358,7 +395,7 @@
         if (!ip) throw new Error("Không thể lấy địa chỉ IP của bạn.");
         if (ipText) ipText.textContent = ip;
 
-        await notifyAdminOnIpChecked(ip, "Check IP thành công", chatId);
+        await notifyAdminOnIpChecked(ip, "Check IP thành công", chatId, userName);
 
         if (getUsedIps().includes(ip)) {
           showError("IP đã sử dụng", "IP này đã được xác nhận trước đó. Vui lòng đổi IP khác.");
@@ -370,8 +407,9 @@
         if (statusText) statusText.textContent = "IP hợp lệ — Đang tạo link vượt link Traffic so1...";
 
         const chatParam = chatId ? `&chat_id=${encodeURIComponent(chatId)}` : "";
+        const nameParam = userName ? `&user_name=${encodeURIComponent(userName)}` : "";
         const sidParam = `&sid=${encodeURIComponent(sessionId)}`;
-        const receiveFileUrl = `${window.location.origin}${window.location.pathname}?step=nhanfile&ip=${encodeURIComponent(ip)}${chatParam}${sidParam}&ts=${Date.now()}`;
+        const receiveFileUrl = `${window.location.origin}${window.location.pathname}?step=nhanfile&ip=${encodeURIComponent(ip)}${chatParam}${nameParam}${sidParam}&ts=${Date.now()}`;
         const apiUrl = `${CREATE_API_BASE}?apikey=${encodeURIComponent(API_KEY)}&url=${encodeURIComponent(receiveFileUrl)}`;
 
         const res = await fetchWithTimeout(apiUrl, 10000);
@@ -410,16 +448,11 @@
     }
 
     (function init() {
-      const params = new URLSearchParams(window.location.search);
-      const step = (params.get("step") || "").trim().toLowerCase();
-      const passedIp = (params.get("ip") || "").trim();
-      const chatId = (params.get("chat_id") || "").trim();
-      const sessionId = (params.get("sid") || "").trim();
-
+      const { step, passedIp, chatId, userName, sessionId } = normalizeUserContext();
       if (step === "nhanfile") {
-        runStep2ReceiveFile(passedIp, chatId, sessionId);
+        runStep2ReceiveFile(passedIp, chatId, userName, sessionId);
       } else {
-        runStep1Gate(chatId);
+        runStep1Gate(chatId, userName);
       }
     })();
   </script>
