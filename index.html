@@ -187,7 +187,7 @@
       if (noteBox) {
         if (noteMsg) {
           noteBox.style.display = "block";
-          noteBox.textContent = `📌 Note IP: ${noteMsg}`;
+          noteBox.textContent = ` : ${noteMsg}`;
         } else {
           noteBox.style.display = "none";
           noteBox.textContent = "";
@@ -513,7 +513,7 @@
 
         // 2. Check dự phòng trên trình duyệt hiện tại
         if (isIpBlockedLocally(ip)) {
-          await notifyAdminOnIpChecked(ip, "Chặn IP trùng (lỗi)", chatId, userName);
+          await notifyAdminOnIpChecked(ip, "Chặn IP trùng (localStorage)", chatId, userName);
           showError(
             " ",
             " lỗi ",
