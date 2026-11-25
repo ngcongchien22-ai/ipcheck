@@ -1,1 +1,1057 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CHICONGDZ — License Center</title>
+  <style>
+    :root {
+      --bg-main: #06090c;
+      --bg-card: #0c1116;
+      --bg-input: #080c10;
+      --border: #1b242d;
+      --border-focus: #60a5fa;
+      --text-main: #f1f5f9;
+      --text-muted: #7c8a99;
+      --accent: #4ef2a4;
+      --accent-hover: #36df8f;
+      --accent-ink: #04130c;
+      --danger: #f87171;
+      --warn: #facc15;
+    }
 
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    }
+
+    html, body {
+      min-height: 100vh;
+      background: radial-gradient(circle at 12% 8%, rgba(78, 242, 164, 0.06), transparent 36%),
+                  radial-gradient(circle at 88% 85%, rgba(56, 189, 248, 0.05), transparent 40%),
+                  var(--bg-main);
+      color: var(--text-main);
+      padding: 24px 20px 40px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 720px;
+      margin: 0 auto;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 44px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: #cbd5e1;
+    }
+
+    .brand-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 10px var(--accent);
+    }
+
+    .lang-switch {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      font-size: 12px;
+      color: var(--text-muted);
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .lang-pill {
+      width: 30px;
+      height: 16px;
+      border-radius: 999px;
+      background: #1e293b;
+      position: relative;
+      transition: background 0.2s ease;
+    }
+
+    .lang-pill::after {
+      content: "";
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #e2e8f0;
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      transition: transform 0.2s ease;
+    }
+
+    .lang-switch[data-lang="en"] .lang-pill {
+      background: rgba(78, 242, 164, 0.28);
+    }
+
+    .lang-switch[data-lang="en"] .lang-pill::after {
+      transform: translateX(14px);
+      background: var(--accent);
+    }
+
+    .lang-active {
+      color: var(--text-main);
+      font-weight: 600;
+    }
+
+    .eyebrow {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 12px;
+    }
+
+    .eyebrow::before {
+      content: "";
+      width: 14px;
+      height: 2px;
+      background: var(--accent);
+    }
+
+    .hero-title {
+      font-size: clamp(28px, 4.5vw, 38px);
+      font-weight: 700;
+      line-height: 1.18;
+      letter-spacing: -0.02em;
+      margin-bottom: 12px;
+    }
+
+    .hero-desc {
+      font-size: 15px;
+      line-height: 1.6;
+      color: var(--text-muted);
+      max-width: 600px;
+      margin-bottom: 28px;
+    }
+
+    .panel {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 24px;
+    }
+
+    .field {
+      margin-bottom: 18px;
+    }
+
+    .field label {
+      display: block;
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+
+    .select-wrap {
+      position: relative;
+    }
+
+    .select-wrap select {
+      width: 100%;
+      appearance: none;
+      -webkit-appearance: none;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 13px 40px 13px 14px;
+      font-size: 14px;
+      color: var(--text-main);
+      outline: none;
+      cursor: pointer;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .select-wrap select:focus {
+      border-color: var(--border-focus);
+      box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.22);
+    }
+
+    .select-wrap::after {
+      content: "⌄";
+      position: absolute;
+      right: 14px;
+      top: 50%;
+      transform: translateY(-56%);
+      color: var(--text-muted);
+      font-size: 16px;
+      pointer-events: none;
+    }
+
+    .btn-primary {
+      width: 100%;
+      margin-top: 6px;
+      padding: 13px 18px;
+      border-radius: 8px;
+      border: 0;
+      background: var(--accent);
+      color: var(--accent-ink);
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.15s ease, transform 0.1s ease;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: var(--accent-hover);
+    }
+
+    .btn-primary:active:not(:disabled) {
+      transform: translateY(1px);
+    }
+
+    .btn-primary:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    .status-box {
+      margin-top: 18px;
+      padding: 14px;
+      border-radius: 10px;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      font-size: 13px;
+      line-height: 1.6;
+      display: none;
+    }
+
+    .status-wait { color: var(--warn); font-weight: 600; }
+    .status-err { color: var(--danger); font-weight: 600; }
+    .status-ok { color: var(--accent); font-weight: 600; }
+
+    .note-box {
+      margin-top: 10px;
+      padding: 9px 12px;
+      border-radius: 8px;
+      background: rgba(248, 113, 113, 0.1);
+      border: 1px solid rgba(248, 113, 113, 0.35);
+      color: #fecaca;
+      font-size: 12px;
+      display: none;
+    }
+
+    .key-box {
+      margin-top: 12px;
+      padding: 14px;
+      border-radius: 10px;
+      background: rgba(78, 242, 164, 0.08);
+      border: 1px solid rgba(78, 242, 164, 0.38);
+      display: none;
+    }
+
+    .key-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--accent);
+      margin-bottom: 6px;
+      font-weight: 700;
+    }
+
+    .key-value {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 15px;
+      font-weight: 700;
+      color: #ffffff;
+      word-break: break-all;
+      user-select: all;
+    }
+
+    .key-meta {
+      margin-top: 6px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .action-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
+
+    .btn-secondary {
+      padding: 9px 14px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: #121920;
+      color: var(--text-main);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+    }
+
+    .btn-secondary:hover {
+      border-color: #334155;
+    }
+
+    .community-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 16px;
+    }
+
+    .community-card {
+      display: block;
+      text-decoration: none;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 16px;
+      transition: border-color 0.15s ease, transform 0.12s ease;
+    }
+
+    .community-card:hover {
+      border-color: #2c3a48;
+      transform: translateY(-1px);
+    }
+
+    .community-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-main);
+      margin-bottom: 4px;
+    }
+
+    .community-sub {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .disclaimer {
+      margin-top: 22px;
+      text-align: center;
+      font-size: 12px;
+      line-height: 1.6;
+      color: #556270;
+    }
+
+    @media (max-width: 560px) {
+      .community-grid {
+        grid-template-columns: 1fr;
+      }
+      .panel {
+        padding: 18px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="app" aria-hidden="true"></div>
+
+  <div class="container">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-dot"></span>
+        <span id="brandLabel">CHICONGDZ V6</span>
+      </div>
+
+      <div id="langSwitch" class="lang-switch" data-lang="vi" role="button" tabindex="0" onclick="toggleLanguage()">
+        <span id="langVi" class="lang-active">VI</span>
+        <span class="lang-pill"></span>
+        <span id="langEn">EN</span>
+      </div>
+    </header>
+
+    <div class="eyebrow" id="eyebrowText">LICENSE CENTER</div>
+    <h1 class="hero-title" id="heroTitle">Nhận key đơn giản, rõ ràng.</h1>
+    <p class="hero-desc" id="heroDesc">
+      Chọn ứng dụng và bấm Get Key. Hệ thống sẽ kiểm tra IP và chuyển hướng vượt link trước khi cấp key cho bạn.
+    </p>
+
+    <main class="panel">
+      <div class="field">
+        <label for="appSelect" id="appLabel">Ứng dụng</label>
+        <div class="select-wrap">
+          <select id="appSelect">
+            <option value="CHICONGDZ V6">CHICONGDZ V6</option>
+            <option value="Overlay Mod Pro">Overlay Mod Pro</option>
+            <option value="Script Tool VIP">Script Tool VIP</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="methodSelect" id="methodLabel">Phương thức</label>
+        <div class="select-wrap">
+          <select id="methodSelect">
+            <option value="TrafficSo1">TrafficSo1</option>
+            <option value="Link4M">Link4M</option>
+          </select>
+        </div>
+      </div>
+
+      <button id="getKeyBtn" class="btn-primary" type="button" onclick="handleGetKeyClick()">Get Key</button>
+
+      <div id="statusBox" class="status-box">
+        <div>IP: <strong id="ipText">Đang kiểm tra...</strong></div>
+        <div><span id="statusLabel">Trạng thái:</span> <span id="statusText" class="status-wait">Đang xác nhận...</span></div>
+        <div id="noteBox" class="note-box"></div>
+        <div id="detailText" style="margin-top: 6px; color: #94a3b8; font-size: 12px;"></div>
+
+        <div id="keyBox" class="key-box">
+          <div class="key-label" id="keyBoxLabel">KEY CỦA BẠN</div>
+          <div id="keyValue" class="key-value"></div>
+          <div id="keyMeta" class="key-meta"></div>
+        </div>
+
+        <div class="action-row">
+          <button id="copyKeyBtn" class="btn-secondary" type="button" style="display: none;" onclick="copyGeneratedKey()">Sao chép Key</button>
+          <a id="manualLink" class="btn-secondary" href="#" target="_blank" rel="noopener" style="display: none;">Mở link vượt</a>
+          <button id="retryBtn" class="btn-secondary" type="button" style="display: none;" onclick="window.location.reload()">Thử lại</button>
+        </div>
+      </div>
+    </main>
+
+    <section class="community-grid">
+      <a class="community-card" href="https://t.me/cacnhieuvetxuoc" target="_blank" rel="noopener">
+        <div class="community-title" id="tgTitle">Telegram hỗ trợ</div>
+        <div class="community-sub">t.me/cacnhieuvetxuoc</div>
+      </a>
+
+      <a class="community-card" href="https://www.tiktok.com" target="_blank" rel="noopener">
+        <div class="community-title" id="ttTitle">TikTok cập nhật</div>
+        <div class="community-sub">@chicongdz</div>
+      </a>
+    </section>
+
+    <p class="disclaimer" id="disclaimerText">
+      Hệ thống kiểm tra IP tự động để chống trùng lặp. Không nhập mật khẩu tài khoản game hoặc thông tin thanh toán vào trang này.
+    </p>
+  </div>
+
+  <script>
+    const API_KEY = "cf5e995ca4e04a2e9980c49b1683593b";
+    const CREATE_API_BASE = "https://manager.trafficso1.com/api/cong-khai/tao-lien-ket";
+    const TASK_URL_TEMPLATE = "https://trafficso1.com/{id}";
+
+    // Google Apps Script Web App đọc & tự ghi note IP vào Google Sheet
+    const SCRIPT_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwKQXHkp5IOEu89YxuHns2CO1X4a4qDcYyWm3Usnx-luKYETZUjeII6Zox4vsYBL9ez/exec";
+
+    // Cấu hình Get Key
+    const KEY_PREFIX = "CHICONG";
+    const KEY_VALID_HOURS = 24;
+    const IP_BLOCK_HOURS = 24;
+
+    // Cấu hình Bot Telegram
+    const BOT_TOKEN = "9250122094:AAEHNtY6i0gGfzv1V_KfgM_hBvkLilbszog";
+    const ADMIN_CHAT_ID = "7815348177";
+
+    const USED_IP_STORAGE_KEY = "trafficso1_used_ips_v2";
+    const GENERATED_KEY_STORAGE_PREFIX = "getkey_saved_";
+
+    const I18N = {
+      vi: {
+        eyebrow: "LICENSE CENTER",
+        heroTitle: "Nhận key đơn giản, rõ ràng.",
+        heroDesc: "Chọn ứng dụng và bấm Get Key. Hệ thống sẽ kiểm tra IP và chuyển hướng vượt link trước khi cấp key cho bạn.",
+        appLabel: "Ứng dụng",
+        methodLabel: "Phương thức",
+        getKeyBtn: "Get Key",
+        statusLabel: "Trạng thái:",
+        keyBoxLabel: "KEY CỦA BẠN",
+        copyBtn: "Sao chép Key",
+        copiedBtn: "Đã sao chép",
+        manualLink: "Mở link vượt",
+        retryBtn: "Thử lại",
+        tgTitle: "Telegram hỗ trợ",
+        ttTitle: "TikTok cập nhật",
+        disclaimer: "Hệ thống kiểm tra IP tự động để chống trùng lặp. Không nhập mật khẩu tài khoản game hoặc thông tin thanh toán vào trang này."
+      },
+      en: {
+        eyebrow: "LICENSE CENTER",
+        heroTitle: "Simple, clear key access.",
+        heroDesc: "Select an application and press Get Key. Your IP will be verified and routed through the checkpoint before issuing a key.",
+        appLabel: "Application",
+        methodLabel: "Method",
+        getKeyBtn: "Get Key",
+        statusLabel: "Status:",
+        keyBoxLabel: "YOUR KEY",
+        copyBtn: "Copy Key",
+        copiedBtn: "Copied",
+        manualLink: "Open checkpoint link",
+        retryBtn: "Retry",
+        tgTitle: "Telegram support",
+        ttTitle: "TikTok updates",
+        disclaimer: "IP verification prevents duplicate requests. Never enter game account passwords or payment details on this page."
+      }
+    };
+
+    let currentLang = "vi";
+    let currentKeyString = "";
+
+    const appSelect = document.getElementById("appSelect");
+    const methodSelect = document.getElementById("methodSelect");
+    const getKeyBtn = document.getElementById("getKeyBtn");
+    const statusBox = document.getElementById("statusBox");
+    const ipText = document.getElementById("ipText");
+    const statusText = document.getElementById("statusText");
+    const noteBox = document.getElementById("noteBox");
+    const detailText = document.getElementById("detailText");
+    const keyBox = document.getElementById("keyBox");
+    const keyValueEl = document.getElementById("keyValue");
+    const keyMetaEl = document.getElementById("keyMeta");
+    const manualLink = document.getElementById("manualLink");
+    const copyKeyBtn = document.getElementById("copyKeyBtn");
+    const retryBtn = document.getElementById("retryBtn");
+
+    function toggleLanguage() {
+      currentLang = currentLang === "vi" ? "en" : "vi";
+      const t = I18N[currentLang];
+      const sw = document.getElementById("langSwitch");
+      if (sw) sw.setAttribute("data-lang", currentLang);
+      document.getElementById("langVi").className = currentLang === "vi" ? "lang-active" : "";
+      document.getElementById("langEn").className = currentLang === "en" ? "lang-active" : "";
+
+      document.getElementById("eyebrowText").textContent = t.eyebrow;
+      document.getElementById("heroTitle").textContent = t.heroTitle;
+      document.getElementById("heroDesc").textContent = t.heroDesc;
+      document.getElementById("appLabel").textContent = t.appLabel;
+      document.getElementById("methodLabel").textContent = t.methodLabel;
+      if (!getKeyBtn.disabled) getKeyBtn.textContent = t.getKeyBtn;
+      document.getElementById("statusLabel").textContent = t.statusLabel;
+      document.getElementById("keyBoxLabel").textContent = t.keyBoxLabel;
+      if (copyKeyBtn.textContent !== t.copiedBtn) copyKeyBtn.textContent = t.copyBtn;
+      manualLink.textContent = t.manualLink;
+      retryBtn.textContent = t.retryBtn;
+      document.getElementById("tgTitle").textContent = t.tgTitle;
+      document.getElementById("ttTitle").textContent = t.ttTitle;
+      document.getElementById("disclaimerText").textContent = t.disclaimer;
+    }
+
+    function escapeHtml(str) {
+      return String(str || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function normalizeUserContext() {
+      const params = new URLSearchParams(window.location.search);
+      const step = (params.get("step") || "").trim().toLowerCase();
+      const passedIp = (params.get("ip") || "").trim();
+      const rawChatId = (params.get("chat_id") || params.get("user_id") || params.get("id") || "").trim();
+      const chatId = /^\d+$/.test(rawChatId) ? rawChatId : "";
+      const userName = (params.get("user_name") || params.get("name") || "").trim();
+      const sessionId = (params.get("sid") || "").trim();
+      const appName = (params.get("app") || "").trim();
+      const methodName = (params.get("method") || "").trim();
+      return { step, passedIp, chatId, userName, sessionId, appName, methodName };
+    }
+
+    function buildSafeCallbackData(prefix, chatId, refId) {
+      const cid = String(chatId || "").trim();
+      const sid = String(refId || "").trim().slice(0, 32);
+      const combined = cid ? `${prefix}:${cid}|${sid}` : `${prefix}:${sid}`;
+      return combined.length <= 64 ? combined : `${prefix}:${sid}`.slice(0, 64);
+    }
+
+    function generateKeyForSession(ip, sessionId, appName) {
+      const storageKey = `${GENERATED_KEY_STORAGE_PREFIX}${sessionId || ip}`;
+      try {
+        const cached = JSON.parse(localStorage.getItem(storageKey) || "null");
+        if (cached && cached.key && cached.expiresAt && Date.now() < cached.expiresAt) {
+          return cached;
+        }
+      } catch (_) {}
+
+      const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+      const randPart = (len) => {
+        let out = "";
+        for (let i = 0; i < len; i++) {
+          out += chars[Math.floor(Math.random() * chars.length)];
+        }
+        return out;
+      };
+
+      const key = `${KEY_PREFIX}-${randPart(4)}-${randPart(4)}-${randPart(4)}`;
+      const createdAt = Date.now();
+      const expiresAt = createdAt + KEY_VALID_HOURS * 60 * 60 * 1000;
+      const record = { key, ip, sessionId, appName, createdAt, expiresAt };
+
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(record));
+      } catch (_) {}
+
+      return record;
+    }
+
+    function copyGeneratedKey() {
+      if (!currentKeyString) return;
+      const doneText = I18N[currentLang].copiedBtn;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(currentKeyString).then(() => {
+          copyKeyBtn.textContent = doneText;
+        }).catch(() => {});
+      } else {
+        const ta = document.createElement("textarea");
+        ta.value = currentKeyString;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+        copyKeyBtn.textContent = doneText;
+      }
+    }
+
+    function setStatus(type, msg) {
+      statusBox.style.display = "block";
+      statusText.className = type === "err" ? "status-err" : type === "ok" ? "status-ok" : "status-wait";
+      statusText.textContent = msg;
+    }
+
+    function showError(statusMsg, detailMsg, noteMsg = "", hideRetry = false) {
+      setStatus("err", statusMsg);
+      if (noteMsg) {
+        noteBox.style.display = "block";
+        noteBox.textContent = `Note IP: ${noteMsg}`;
+      } else {
+        noteBox.style.display = "none";
+        noteBox.textContent = "";
+      }
+      detailText.textContent = detailMsg || "";
+      retryBtn.style.display = hideRetry ? "none" : "inline-block";
+    }
+
+    function getUsedIpMap() {
+      try {
+        const raw = JSON.parse(localStorage.getItem(USED_IP_STORAGE_KEY) || "{}");
+        if (Array.isArray(raw)) {
+          const map = {};
+          raw.forEach(ip => { map[ip] = Date.now(); });
+          return map;
+        }
+        return raw && typeof raw === "object" ? raw : {};
+      } catch (_) {
+        return {};
+      }
+    }
+
+    function isIpBlockedLocally(ip) {
+      const map = getUsedIpMap();
+      const entry = map[ip];
+      if (!entry) return false;
+      const savedAt = typeof entry === "object" ? entry.ts : entry;
+      if (!savedAt) return false;
+      if (!IP_BLOCK_HOURS || IP_BLOCK_HOURS <= 0) return true;
+      const elapsedHours = (Date.now() - savedAt) / (1000 * 60 * 60);
+      if (elapsedHours >= IP_BLOCK_HOURS) {
+        delete map[ip];
+        localStorage.setItem(USED_IP_STORAGE_KEY, JSON.stringify(map));
+        return false;
+      }
+      return true;
+    }
+
+    function saveUsedIpLocally(ip, note = "Đã tạo link get key") {
+      if (!ip) return;
+      const map = getUsedIpMap();
+      map[ip] = { ts: Date.now(), note };
+      localStorage.setItem(USED_IP_STORAGE_KEY, JSON.stringify(map));
+    }
+
+    async function fetchWithTimeout(url, timeoutMs = 8000) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        return await fetch(url, {
+          method: "GET",
+          cache: "no-store",
+          signal: controller.signal
+        });
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
+    async function fetchClientIp() {
+      const sources = [
+        async () => {
+          const r = await fetchWithTimeout("https://api.ipify.org?format=json");
+          const d = await r.json();
+          return d && d.ip ? String(d.ip).trim() : "";
+        },
+        async () => {
+          const r = await fetchWithTimeout("https://api64.ipify.org?format=json");
+          const d = await r.json();
+          return d && d.ip ? String(d.ip).trim() : "";
+        },
+        async () => {
+          const r = await fetchWithTimeout("https://ipwho.is/");
+          const d = await r.json();
+          return d && d.success && d.ip ? String(d.ip).trim() : "";
+        }
+      ];
+
+      for (const getIp of sources) {
+        try {
+          const ip = await getIp();
+          if (ip) return ip;
+        } catch (_) {}
+      }
+      return "";
+    }
+
+    async function findNoteFromSheet(ip) {
+      if (!SCRIPT_WEB_APP_URL || !ip) return null;
+      try {
+        const sep = SCRIPT_WEB_APP_URL.includes("?") ? "&" : "?";
+        const res = await fetchWithTimeout(
+          `${SCRIPT_WEB_APP_URL}${sep}ip=${encodeURIComponent(ip)}&_t=${Date.now()}`,
+          7000
+        );
+        if (!res.ok) return null;
+        const data = await res.json();
+        if (data && data.ok && data.used) {
+          return {
+            note: data.note || "IP đã có ghi chú trong Sheet",
+            updatedAt: data.updated_at || ""
+          };
+        }
+        return null;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    async function autoSaveNoteToSheet(ip, note, chatId = "", userName = "") {
+      if (!ip) return;
+      saveUsedIpLocally(ip, note);
+
+      if (!SCRIPT_WEB_APP_URL) return;
+      try {
+        await fetch(SCRIPT_WEB_APP_URL, {
+          method: "POST",
+          mode: "no-cors",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          keepalive: true,
+          body: JSON.stringify({
+            ip,
+            note,
+            chat_id: chatId || "",
+            user_name: userName || "",
+            updated_at: new Date().toLocaleString("vi-VN")
+          })
+        });
+      } catch (_) {}
+    }
+
+    function buildTrafficLink(parsed, rawText, forbiddenUrl) {
+      if (parsed && typeof parsed === "object") {
+        const candidates = [parsed, parsed.data].filter(Boolean);
+        for (const obj of candidates) {
+          if (typeof obj !== "object") continue;
+          for (const key of ["short_url", "shortenedUrl", "short_link", "shortLink", "task_url", "traffic_url", "url", "link"]) {
+            const val = obj[key];
+            if (
+              typeof val === "string" &&
+              /^https?:\/\//i.test(val.trim()) &&
+              val.trim() !== forbiddenUrl &&
+              !val.includes("step=nhanfile")
+            ) {
+              return val.trim();
+            }
+          }
+          if (obj.id !== undefined && obj.id !== null && String(obj.id).trim() !== "") {
+            return TASK_URL_TEMPLATE.replace("{id}", encodeURIComponent(String(obj.id).trim()));
+          }
+        }
+      }
+
+      if (typeof rawText === "string") {
+        const idMatch = rawText.match(/"id"\s*:\s*"?([^",\s}]+)"?/);
+        if (idMatch && idMatch[1]) {
+          return TASK_URL_TEMPLATE.replace("{id}", encodeURIComponent(idMatch[1].trim()));
+        }
+      }
+
+      return "";
+    }
+
+    async function sendTelegramNotice(targetChatId, text, replyMarkup = null) {
+      if (!BOT_TOKEN || !targetChatId) return false;
+      try {
+        const payload = {
+          chat_id: targetChatId,
+          text,
+          parse_mode: "HTML",
+          disable_web_page_preview: true
+        };
+        if (replyMarkup) payload.reply_markup = replyMarkup;
+
+        const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          keepalive: true,
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        return Boolean(res.ok && data && data.ok);
+      } catch (_) {
+        return false;
+      }
+    }
+
+    async function notifyAdminOnIpChecked(ip, stageLabel, chatId, userName, appName, methodName) {
+      if (!ip) return;
+      const timeStr = new Date().toLocaleString("vi-VN");
+      const adminMsg =
+        `🛡️ <b>LICENSE CENTER - CHECK IP</b>\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `🌐 IP: <code>${escapeHtml(ip)}</code>\n` +
+        (appName ? `📱 App: <b>${escapeHtml(appName)}</b>\n` : "") +
+        (methodName ? `🔗 Phương thức: <b>${escapeHtml(methodName)}</b>\n` : "") +
+        `📌 Trạng thái: ${escapeHtml(stageLabel)}\n` +
+        (chatId ? `🆔 ID: <code>${escapeHtml(chatId)}</code>\n` : "") +
+        (userName ? `👤 User: <b>${escapeHtml(userName)}</b>\n` : "") +
+        `🕒 Thời gian: <i>${escapeHtml(timeStr)}</i>`;
+
+      await sendTelegramNotice(ADMIN_CHAT_ID, adminMsg);
+    }
+
+    async function sendKeyNotification({ sessionId, currentIp, passedIp, chatId, userName, appName, methodName, keyRecord }) {
+      const refId = sessionId || currentIp;
+      const expStr = new Date(keyRecord.expiresAt).toLocaleString("vi-VN");
+      const text =
+        `🔑 <b>GET KEY THÀNH CÔNG</b>\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `🔐 Key: <code>${escapeHtml(keyRecord.key)}</code>\n` +
+        (appName ? `📱 App: <b>${escapeHtml(appName)}</b>\n` : "") +
+        (methodName ? `🔗 Phương thức: <b>${escapeHtml(methodName)}</b>\n` : "") +
+        `⏳ Hạn dùng: <i>${escapeHtml(expStr)}</i>\n` +
+        `✅ IP: <code>${escapeHtml(currentIp)}</code>` +
+        (passedIp && passedIp !== currentIp ? ` (IP ban đầu: <code>${escapeHtml(passedIp)}</code>)` : "") + `\n` +
+        (chatId ? `🆔 ID: <code>${escapeHtml(chatId)}</code>\n` : "") +
+        (userName ? `👤 User: <b>${escapeHtml(userName)}</b>\n` : "") +
+        `🔑 Session: <code>${escapeHtml(sessionId || "N/A")}</code>`;
+
+      const keyboard = {
+        inline_keyboard: [[
+          { text: "✅ Duyệt view", callback_data: buildSafeCallbackData("approve", chatId, refId) },
+          { text: "❌ Từ chối", callback_data: buildSafeCallbackData("reject", chatId, refId) }
+        ]]
+      };
+
+      const sentAdmin = await sendTelegramNotice(ADMIN_CHAT_ID, text, keyboard);
+      if (chatId && String(chatId).trim() !== String(ADMIN_CHAT_ID)) {
+        await sendTelegramNotice(
+          String(chatId).trim(),
+          `🔑 <b>Get Key thành công!</b>\n` +
+          (appName ? `📱 App: <b>${escapeHtml(appName)}</b>\n` : "") +
+          `🌐 IP: <code>${escapeHtml(currentIp)}</code>\n` +
+          `🔐 Key: <code>${escapeHtml(keyRecord.key)}</code>\n` +
+          `⏳ Hạn dùng: <i>${escapeHtml(expStr)}</i>`
+        );
+      }
+      return { ok: sentAdmin, viewId: sessionId, error: "" };
+    }
+
+    function renderKeyResult(ip, keyRecord, appName) {
+      currentKeyString = keyRecord.key;
+      setStatus("ok", "Đã cấp Key thành công");
+      detailText.textContent = appName ? `Ứng dụng: ${appName}` : "Key đã sẵn sàng sử dụng.";
+
+      keyBox.style.display = "block";
+      keyValueEl.textContent = keyRecord.key;
+      keyMetaEl.textContent = `Hiệu lực ${KEY_VALID_HOURS}h — Hết hạn: ${new Date(keyRecord.expiresAt).toLocaleString("vi-VN")}`;
+      copyKeyBtn.style.display = "inline-block";
+    }
+
+    async function runStep2ReceiveKey(passedIp, chatId, userName, sessionId, appName, methodName) {
+      getKeyBtn.disabled = true;
+      setStatus("wait", "Đang xác nhận IP và khởi tạo Key...");
+
+      const detectedIp = await fetchClientIp();
+      const finalIp = detectedIp || passedIp;
+
+      if (!finalIp) {
+        ipText.textContent = "Không rõ";
+        getKeyBtn.disabled = false;
+        showError("Không xác nhận được IP", "Vui lòng kiểm tra kết nối mạng hoặc thử lại.");
+        return;
+      }
+
+      ipText.textContent = finalIp;
+      const keyRecord = generateKeyForSession(finalIp, sessionId, appName);
+
+      await autoSaveNoteToSheet(
+        finalIp,
+        `Key: ${keyRecord.key}${appName ? ` (${appName})` : ""}`,
+        chatId,
+        userName
+      );
+      await notifyAdminOnIpChecked(finalIp, `Nhận key thành công (${keyRecord.key})`, chatId, userName, appName, methodName);
+
+      await sendKeyNotification({
+        sessionId,
+        currentIp: finalIp,
+        passedIp,
+        chatId,
+        userName,
+        appName,
+        methodName,
+        keyRecord
+      });
+
+      renderKeyResult(finalIp, keyRecord, appName);
+    }
+
+    async function handleGetKeyClick() {
+      const { chatId, userName } = normalizeUserContext();
+      const appName = appSelect.value;
+      const methodName = methodSelect.value;
+
+      getKeyBtn.disabled = true;
+      getKeyBtn.textContent = "Đang kiểm tra...";
+      noteBox.style.display = "none";
+      keyBox.style.display = "none";
+      manualLink.style.display = "none";
+      copyKeyBtn.style.display = "none";
+      retryBtn.style.display = "none";
+      setStatus("wait", "Đang lấy IP và kiểm tra trùng lặp...");
+
+      try {
+        if (!/^https?:\/\//i.test(window.location.origin)) {
+          throw new Error("Hãy mở trang qua http:// hoặc https://.");
+        }
+
+        const ip = await fetchClientIp();
+        if (!ip) throw new Error("Không thể lấy địa chỉ IP của bạn.");
+        ipText.textContent = ip;
+
+        // 1. Check IP trùng trong Google Sheet
+        const sheetNote = await findNoteFromSheet(ip);
+        if (sheetNote) {
+          const noteDisplay = sheetNote.updatedAt
+            ? `${sheetNote.note} (${sheetNote.updatedAt})`
+            : sheetNote.note;
+          await notifyAdminOnIpChecked(ip, `Chặn IP trùng (${sheetNote.note})`, chatId, userName, appName, methodName);
+          showError(
+            "IP bị trùng — Không tạo link vượt",
+            "IP này đã có ghi chú trong hệ thống nên không thể lấy thêm key.",
+            noteDisplay,
+            true
+          );
+          return;
+        }
+
+        // 2. Check dự phòng localStorage
+        if (isIpBlockedLocally(ip)) {
+          await notifyAdminOnIpChecked(ip, "Chặn IP trùng (localStorage)", chatId, userName, appName, methodName);
+          showError(
+            "IP đã sử dụng",
+            "IP này đã được ghi nhận trước đó. Vui lòng đổi IP khác.",
+            "Đã từng sử dụng trên trình duyệt này",
+            true
+          );
+          return;
+        }
+
+        const sessionId = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+        // Tự ghi note IP vào Google Sheet
+        await autoSaveNoteToSheet(
+          ip,
+          `Đang get key ${appName}${userName ? ` (${userName})` : ""}`,
+          chatId,
+          userName
+        );
+        await notifyAdminOnIpChecked(ip, "IP hợp lệ — Đang tạo link vượt", chatId, userName, appName, methodName);
+
+        setStatus("wait", "IP hợp lệ — Đang tạo link vượt...");
+
+        const params = new URLSearchParams({
+          step: "nhanfile",
+          ip,
+          sid: sessionId,
+          app: appName,
+          method: methodName,
+          ts: String(Date.now())
+        });
+        if (chatId) params.set("chat_id", chatId);
+        if (userName) params.set("user_name", userName);
+
+        const receiveKeyUrl = `${window.location.origin}${window.location.pathname}?${params.toString()}`;
+        const apiUrl = `${CREATE_API_BASE}?apikey=${encodeURIComponent(API_KEY)}&url=${encodeURIComponent(receiveKeyUrl)}`;
+
+        const res = await fetchWithTimeout(apiUrl, 10000);
+        const rawText = await res.text();
+
+        let parsed = null;
+        try {
+          parsed = JSON.parse(rawText);
+        } catch (_) {}
+
+        const trafficLink = buildTrafficLink(parsed, rawText, receiveKeyUrl);
+
+        if (!trafficLink) {
+          getKeyBtn.disabled = false;
+          getKeyBtn.textContent = I18N[currentLang].getKeyBtn;
+          showError(
+            `Chưa lấy được link vượt (HTTP ${res.status})`,
+            rawText ? `Phản hồi: ${rawText.slice(0, 260)}` : "Phản hồi rỗng."
+          );
+          return;
+        }
+
+        detailText.textContent = "Đã tạo link vượt. Đang chuyển hướng...";
+        manualLink.href = trafficLink;
+        manualLink.style.display = "inline-block";
+
+        window.location.replace(trafficLink);
+      } catch (err) {
+        getKeyBtn.disabled = false;
+        getKeyBtn.textContent = I18N[currentLang].getKeyBtn;
+        const msg = err && err.name === "AbortError"
+          ? "Hết thời gian chờ phản hồi từ máy chủ API."
+          : "Không gọi được API tạo link hoặc mất kết nối mạng.";
+        showError("Lỗi gọi API tạo link", msg);
+      }
+    }
+
+    (function init() {
+      const { step, passedIp, chatId, userName, sessionId, appName, methodName } = normalizeUserContext();
+      if (appName && [...appSelect.options].some(o => o.value === appName)) {
+        appSelect.value = appName;
+      }
+      if (methodName && [...methodSelect.options].some(o => o.value === methodName)) {
+        methodSelect.value = methodName;
+      }
+      if (step === "nhanfile") {
+        runStep2ReceiveKey(passedIp, chatId, userName, sessionId, appSelect.value, methodSelect.value);
+      }
+    })();
+  </script>
+</body>
+</html>
